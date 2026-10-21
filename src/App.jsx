@@ -186,7 +186,9 @@ export function AppProvider({ children }) {
   const remisionarOrden = async (orden, idConsecutivoStr, nombreUsuario, itemCompraSeleccionado = null) => {
     const cliEncontrado = clientes.find(c => c.nombre.toLowerCase() === orden.cliente_nombre.toLowerCase());
     const telCliente = cliEncontrado ? cliEncontrado.telefono : (orden.cliente_telefono || 'N/A');
-    const numRemisionGenerado = idConsecutivoStr;
+    
+    // Remisión consecutiva terminada en R
+    const numRemisionGenerado = idConsecutivoStr.includes('R') ? idConsecutivoStr : `${idConsecutivoStr}R`;
     const valorCobro = orden.total_pagar > 0 ? orden.total_pagar : (orden.valor_estimado || 0);
 
     const falloStr = orden.fallo_reportado || orden.falla_reportado || 'N/A';
@@ -239,7 +241,10 @@ export function AppProvider({ children }) {
   const agregarVentaDirecta = async (clienteObj, itemsArray, totalCalculado, costoCompraTotal, nombreUsuario) => {
     const nombreCliente = clienteObj ? clienteObj.nombre : 'Cliente Mostrador';
     const telefonoCliente = clienteObj ? (clienteObj.telefono || 'N/A') : 'N/A';
-    const numRemisionGenerado = `REM-${Math.floor(Math.random() * 90000) + 10000}`;
+    
+    // Consecutivo para venta directa terminada en R
+    const consecutivoNum = 1001 + facturas.length;
+    const numRemisionGenerado = `#${consecutivoNum}R`;
 
     const nuevaFac = {
       numero_factura: numRemisionGenerado,
@@ -418,7 +423,7 @@ function MainApp() {
   const [formCompra, setFormCompra] = useState({ proveedor: '', descripcion_producto: '', costo: 0, precio_venta_sugerido: 0 });
   const [mostrarHistorialPortal, setMostrarHistorialPortal] = useState(false);
 
-  const [formNuevoRol, setFormNuevoRol] = useState({ nombre: '', permisos: { crear_orden: true, editar_diagnostico: true, ver_clientes: false, editar_clientes: false, facturar: false, ver_configuracion: false } });
+  const [formNuevoRol, setFormNuevoRol] = useState({ nombre: '', permisos: { crear_orden: true, editar_diagnostico: true, ver_clientes: true, editar_clientes: true, facturar: true, ver_configuracion: true } });
   const [formUsuarioNuevo, setFormUsuarioNuevo] = useState({ nombre: '', usuario: '', clave: '', rolId: roles[0]?.id || '' });
 
   const clientesFiltradosBusqueda = clientes.filter(c => c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) || c.telefono.includes(busquedaCliente));
@@ -498,9 +503,18 @@ function MainApp() {
     }
   };
 
-  const permisos = usuarioSesion?.id === 'emergencia' 
-    ? { crear_orden: true, editar_diagnostico: true, ver_clientes: true, editar_clientes: true, facturar: true, ver_configuracion: true } 
-    : (rolActual ? (typeof rolActual.permisos === 'string' ? JSON.parse(rolActual.permisos) : rolActual.permisos) : {});
+  const permisosRol = rolActual ? (typeof rolActual.permisos === 'string' ? JSON.parse(rolActual.permisos) : rolActual.permisos) : {};
+  
+  const permisos = usuarioSesion?.id === 'emergencia' || (rolActual && rolActual.nombre?.toLowerCase().includes('admin'))
+    ? { crear_orden: true, editar_diagnostico: true, ver_clientes: true, editar_clientes: true, facturar: true, ver_configuracion: true }
+    : {
+        crear_orden: permisosRol.crear_orden ?? true,
+        editar_diagnostico: permisosRol.editar_diagnostico ?? true,
+        ver_clientes: permisosRol.ver_clientes ?? true,
+        editar_clientes: permisosRol.editar_clientes ?? true,
+        facturar: permisosRol.facturar ?? true,
+        ver_configuracion: permisosRol.ver_configuracion ?? true,
+    };
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -723,7 +737,7 @@ function MainApp() {
                           {permisos.editar_diagnostico && <button onClick={() => { setModalEditOrden(o); setEditOrdForm({ estado: o.estado, observacion: '', diagnostico: o.diagnostico || '', presupuesto: o.valor_estimado || 0, totalPagar: o.total_pagar || 0, repuestoCompraId: o.repuesto_compra_id || '' }); }} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">✏️ Diagnóstico</button>}
                           <button onClick={() => enviarWhatsApp(o, idRegistroConsecutivo)} className="bg-emerald-600 text-white px-2 py-1 rounded text-[11px]">💬 WhatsApp</button>
                           <button onClick={() => setDocumentoImprimir({ tipo: 'ORDEN', data: o, idConsecutivo: idRegistroConsecutivo })} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">🖨️ PDF</button>
-                          {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, idConsecutivo: idRegistroConsecutivo, compraId: o.repuesto_compra_id || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
+                          {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, idConsecutivo: `${idRegistroConsecutivo}R`, compraId: o.repuesto_compra_id || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
                         </td>
                       </tr>
                     );
@@ -738,21 +752,28 @@ function MainApp() {
         {tab === 'clientes' && permisos.ver_clientes && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
             <div className="flex justify-between items-center"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="space-x-2"><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button>}</div></div>
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-800 text-slate-400 uppercase"><tr><th className="p-3">Cliente</th><th className="p-3">Teléfono</th><th className="p-3 text-right">Acciones</th></tr></thead>
-              <tbody className="divide-y divide-slate-800">
-                {clientes.map(c => (
-                  <tr key={c.id} className="hover:bg-slate-800/40">
-                    <td className="p-3 font-bold text-white">{c.nombre}</td>
-                    <td className="p-3 text-indigo-400">{c.telefono}</td>
-                    <td className="p-3 text-right space-x-1">
-                      {permisos.editar_clientes && <button onClick={() => { setModalEditCliente(c); setFormNuevoCliente({ nombre: c.nombre || '', telefono: c.telefono || '', cedula: c.cedula || '', email: c.email || '', direccion: c.direccion || '' }); }} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">✏️ Editar</button>}
-                      <button onClick={() => setVerHistorialCliente(c)} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">📜 Historial</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {clientes.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 text-xs space-y-2">
+                <p className="text-sm font-semibold text-slate-300">No hay clientes registrados en esta empresa todavía.</p>
+                <p>Haz clic en el botón <strong>+ Nuevo Cliente</strong> o registra una nueva orden para que aparezcan aquí.</p>
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-800 text-slate-400 uppercase"><tr><th className="p-3">Cliente</th><th className="p-3">Teléfono</th><th className="p-3 text-right">Acciones</th></tr></thead>
+                <tbody className="divide-y divide-slate-800">
+                  {clientes.map(c => (
+                    <tr key={c.id} className="hover:bg-slate-800/40">
+                      <td className="p-3 font-bold text-white">{c.nombre}</td>
+                      <td className="p-3 text-indigo-400">{c.telefono}</td>
+                      <td className="p-3 text-right space-x-1">
+                        {permisos.editar_clientes && <button onClick={() => { setModalEditCliente(c); setFormNuevoCliente({ nombre: c.nombre || '', telefono: c.telefono || '', cedula: c.cedula || '', email: c.email || '', direccion: c.direccion || '' }); }} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">✏️ Editar</button>}
+                        <button onClick={() => setVerHistorialCliente(c)} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">📜 Historial</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
@@ -1046,7 +1067,7 @@ function MainApp() {
                   <label className="flex items-center gap-2"><input type="checkbox" checked={formNuevoRol.permisos.facturar} onChange={e => setFormNuevoRol({ ...formNuevoRol, permisos: { ...formNuevoRol.permisos, facturar: e.target.checked } })} /> Remisiones, Ventas y Compras</label>
                   <label className="flex items-center gap-2"><input type="checkbox" checked={formNuevoRol.permisos.ver_configuracion} onChange={e => setFormNuevoRol({ ...formNuevoRol, permisos: { ...formNuevoRol.permisos, ver_configuracion: e.target.checked } })} /> Configuración</label>
                 </div>
-                <button onClick={async () => { if (!formNuevoRol.nombre) return alert('Ingresa un nombre para el rol.'); await agregarRol(formNuevoRol.nombre, formNuevoRol.permisos); alert('Rol creado con éxito'); setFormNuevoRol({ nombre: '', permisos: { crear_orden: true, editar_diagnostico: true, ver_clientes: false, editar_clientes: false, facturar: false, ver_configuracion: false } }); }} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold">Guardar Nuevo Rol</button>
+                <button onClick={async () => { if (!formNuevoRol.nombre) return alert('Ingresa un nombre para el rol.'); await agregarRol(formNuevoRol.nombre, formNuevoRol.permisos); alert('Rol creado con éxito'); setFormNuevoRol({ nombre: '', permisos: { crear_orden: true, editar_diagnostico: true, ver_clientes: true, editar_clientes: true, facturar: true, ver_configuracion: true } }); }} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold">Guardar Nuevo Rol</button>
 
                 <p className="font-bold text-indigo-400 uppercase pt-4 border-t border-slate-700">Crear Usuario y Asignar Rol</p>
                 <div className="grid grid-cols-2 gap-2"><input placeholder="Nombre Completo" className="bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={formUsuarioNuevo.nombre} onChange={e => setFormUsuarioNuevo({ ...formUsuarioNuevo, nombre: e.target.value })} /><input placeholder="Usuario" className="bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={formUsuarioNuevo.usuario} onChange={e => setFormUsuarioNuevo({ ...formUsuarioNuevo, usuario: e.target.value })} /></div>
@@ -1559,7 +1580,23 @@ function MainApp() {
 
             <div className="flex justify-end gap-2 pt-2 border-t no-imprimir">
               <button onClick={() => setDocumentoImprimir(null)} className="text-slate-500 px-3 text-xs">Cerrar</button>
-              <button onClick={() => window.print()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-xs">Imprimir (Mitad Carta)</button>
+              <button 
+                onClick={() => {
+                  const doc = documentoImprimir.data;
+                  const tel = doc.cliente_telefono || '3000000000';
+                  let msg = '';
+                  if (documentoImprimir.tipo === 'FACTURA') {
+                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Remisión *${doc.numero_factura}* en *${empresa.nombre}*.\n\n📅 Fecha: ${doc.fecha}\n💰 Total: $ ${Number(doc.total || 0).toLocaleString('es-CO')}\n\n¡Gracias por tu preferencia!`;
+                  } else {
+                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos el comprobante de tu Orden de Entrada *${documentoImprimir.idConsecutivo || 'N/A'}* (${doc.tipo_equipo} ${doc.marca_modelo}) en *${empresa.nombre}*.\n\n🔑 Código de seguimiento: *${doc.codigo_seguimiento}*\n📌 Estado: *${doc.estado}*\n\nPuedes consultar el estado en cualquier momento en nuestro portal.`;
+                  }
+                  window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+                }} 
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl font-bold text-xs transition flex items-center gap-1"
+              >
+                💬 Enviar por WhatsApp
+              </button>
+              <button onClick={() => window.print()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl font-bold text-xs transition">Imprimir</button>
             </div>
           </div>
         </div>
@@ -1678,4 +1715,5 @@ export default function App() {
       <AppContent />
     </AppProvider>
   );
+}
 }
