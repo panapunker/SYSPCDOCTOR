@@ -183,12 +183,13 @@ export function AppProvider({ children }) {
     }
   };
 
-  const remisionarOrden = async (orden, idConsecutivoStr, nombreUsuario, itemCompraSeleccionado = null) => {
+  const remisionarOrden = async (orden, nombreUsuario, itemCompraSeleccionado = null) => {
     const cliEncontrado = clientes.find(c => c.nombre.toLowerCase() === orden.cliente_nombre.toLowerCase());
     const telCliente = cliEncontrado ? cliEncontrado.telefono : (orden.cliente_telefono || 'N/A');
     
-    // Remisión consecutiva terminada en R
-    const numRemisionGenerado = idConsecutivoStr.includes('R') ? idConsecutivoStr : `${idConsecutivoStr}R`;
+    // Consecutivo REM-10001
+    const consecutivoNum = 10001 + facturas.length;
+    const numRemisionGenerado = `REM-${consecutivoNum}`;
     const valorCobro = orden.total_pagar > 0 ? orden.total_pagar : (orden.valor_estimado || 0);
 
     const falloStr = orden.fallo_reportado || orden.falla_reportado || 'N/A';
@@ -242,9 +243,9 @@ export function AppProvider({ children }) {
     const nombreCliente = clienteObj ? clienteObj.nombre : 'Cliente Mostrador';
     const telefonoCliente = clienteObj ? (clienteObj.telefono || 'N/A') : 'N/A';
     
-    // Consecutivo para venta directa terminada en R
-    const consecutivoNum = 1001 + facturas.length;
-    const numRemisionGenerado = `#${consecutivoNum}R`;
+    // Consecutivo REM-10001
+    const consecutivoNum = 10001 + facturas.length;
+    const numRemisionGenerado = `REM-${consecutivoNum}`;
 
     const nuevaFac = {
       numero_factura: numRemisionGenerado,
@@ -737,7 +738,7 @@ function MainApp() {
                           {permisos.editar_diagnostico && <button onClick={() => { setModalEditOrden(o); setEditOrdForm({ estado: o.estado, observacion: '', diagnostico: o.diagnostico || '', presupuesto: o.valor_estimado || 0, totalPagar: o.total_pagar || 0, repuestoCompraId: o.repuesto_compra_id || '' }); }} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">✏️ Diagnóstico</button>}
                           <button onClick={() => enviarWhatsApp(o, idRegistroConsecutivo)} className="bg-emerald-600 text-white px-2 py-1 rounded text-[11px]">💬 WhatsApp</button>
                           <button onClick={() => setDocumentoImprimir({ tipo: 'ORDEN', data: o, idConsecutivo: idRegistroConsecutivo })} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">🖨️ PDF</button>
-                          {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, idConsecutivo: `${idRegistroConsecutivo}R`, compraId: o.repuesto_compra_id || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
+                          {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, compraId: o.repuesto_compra_id || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
                         </td>
                       </tr>
                     );
@@ -1337,7 +1338,7 @@ function MainApp() {
       {modalRemisionarOrden && (
         <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-4 z-50 no-imprimir">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md p-6 rounded-2xl space-y-4">
-            <h3 className="font-bold text-white text-base">Remisionar Orden #{modalRemisionarOrden.idConsecutivo}</h3>
+            <h3 className="font-bold text-white text-base">Remisionar Orden</h3>
             <p className="text-xs text-slate-400">Cliente: <strong className="text-white">{modalRemisionarOrden.orden.cliente_nombre}</strong></p>
             
             <div className="space-y-2 pt-2">
@@ -1364,11 +1365,11 @@ function MainApp() {
                   itemCompraObj = compras.find(c => c.id.toString() === modalRemisionarOrden.compraId.toString());
                 }
 
-                const fac = await remisionarOrden(modalRemisionarOrden.orden, modalRemisionarOrden.idConsecutivo, nombreUsrActual, itemCompraObj);
+                const fac = await remisionarOrden(modalRemisionarOrden.orden, nombreUsrActual, itemCompraObj);
                 setModalRemisionarOrden(null);
                 if(fac){
                   alert('¡Remisión Generada Correctamente!');
-                  setDocumentoImprimir({ tipo: 'FACTURA', data: fac, idConsecutivo: modalRemisionarOrden.idConsecutivo });
+                  setDocumentoImprimir({ tipo: 'FACTURA', data: fac });
                 }
               }} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold">Confirmar y Generar Remisión</button>
             </div>
@@ -1584,15 +1585,28 @@ function MainApp() {
                 onClick={() => {
                   const doc = documentoImprimir.data;
                   const tel = doc.cliente_telefono || '3000000000';
+                  
+                  // Generar archivo PDF automáticamente en las descargas para adjuntar
+                  const elHtml = document.getElementById('seccion-impresion').innerHTML;
+                  const blob = new Blob([`<html><head><title>Comprobante</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:8px;}</style></head><body>${elHtml}</body></html>`], { type: 'text/html' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${documentoImprimir.tipo === 'FACTURA' ? doc.numero_factura : 'orden_servicio'}.html`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+
                   let msg = '';
                   if (documentoImprimir.tipo === 'FACTURA') {
-                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Remisión *${doc.numero_factura}* en *${empresa.nombre}*.\n\n📅 Fecha: ${doc.fecha}\n💰 Total: $ ${Number(doc.total || 0).toLocaleString('es-CO')}\n\n¡Gracias por tu preferencia!`;
+                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Remisión *${doc.numero_factura}* en *${empresa.nombre}*.\n\n📅 Fecha: ${doc.fecha}\n💰 Total: $ ${Number(doc.total || 0).toLocaleString('es-CO')}\n\n¡Gracias por tu preferencia! *(Hemos descargado tu archivo en la PC para que puedas adjuntarlo aquí)*`;
                   } else {
                     msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos el comprobante de tu Orden de Entrada *${documentoImprimir.idConsecutivo || 'N/A'}* (${doc.tipo_equipo} ${doc.marca_modelo}) en *${empresa.nombre}*.\n\n🔑 Código de seguimiento: *${doc.codigo_seguimiento}*\n📌 Estado: *${doc.estado}*\n\nPuedes consultar el estado en cualquier momento en nuestro portal.`;
                   }
                   window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`, '_blank');
                 }} 
                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl font-bold text-xs transition flex items-center gap-1"
+                title="Descarga el documento y abre WhatsApp para adjuntarlo"
               >
                 💬 Enviar por WhatsApp
               </button>
