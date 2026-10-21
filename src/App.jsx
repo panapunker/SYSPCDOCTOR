@@ -1598,14 +1598,20 @@ function MainApp() {
                 onClick={() => {
                   const doc = documentoImprimir.data;
                   const tel = doc.cliente_telefono || '3000000000';
+                  const nombreClienteLimpio = (doc.cliente_nombre || 'Cliente').replace(/[^a-zA-Z0-9]/g, '_');
+                  const telefonoLimpio = (doc.cliente_telefono || '0000000000').replace(/[^a-zA-Z0-9]/g, '');
                   
-                  // Descarga automática en la carpeta predeterminada para adjuntar de inmediato
+                  // Nombre del archivo estructurado con número, cliente y celular
                   const elHtml = document.getElementById('seccion-impresion').innerHTML;
                   const blob = new Blob([`<html><head><title>Comprobante</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:8px;}</style></head><body>${elHtml}</body></html>`], { type: 'text/html' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  const nombreArchivo = documentoImprimir.tipo === 'FACTURA' ? `${doc.numero_factura}.html` : `orden_${doc.codigo_seguimiento}.html`;
+                  
+                  const nombreArchivo = documentoImprimir.tipo === 'FACTURA' 
+                    ? `Remision_${doc.numero_factura}_${nombreClienteLimpio}_${telefonoLimpio}.html` 
+                    : `Orden_${documentoImprimir.idConsecutivo || doc.codigo_seguimiento}_${nombreClienteLimpio}_${telefonoLimpio}.html`;
+                  
                   a.download = nombreArchivo;
                   document.body.appendChild(a);
                   a.click();
@@ -1613,14 +1619,14 @@ function MainApp() {
 
                   let msg = '';
                   if (documentoImprimir.tipo === 'FACTURA') {
-                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Remisión *${doc.numero_factura}* en *${empresa.nombre}*.\n\n📅 Fecha: ${doc.fecha}\n💰 Total: $ ${Number(doc.total || 0).toLocaleString('es-CO')}\n\n¡Gracias por tu preferencia!`;
+                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Remisión *${doc.numero_factura}* en *${empresa.nombre}*.`;
                   } else {
-                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Orden de Entrada *${documentoImprimir.idConsecutivo || 'N/A'}* en *${empresa.nombre}*.\n\n📅 Fecha: ${new Date().toISOString().split('T')[0]}\n🔑 Código de seguimiento: *${doc.codigo_seguimiento}*\n📌 Estado: *${doc.estado}*`;
+                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Orden de Entrada *${documentoImprimir.idConsecutivo || 'N/A'}* en *${empresa.nombre}*.`;
                   }
                   window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`, '_blank');
                 }} 
                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl font-bold text-xs transition flex items-center gap-1"
-                title="Descarga el documento y abre WhatsApp para adjuntarlo"
+                title="Descarga el documento con nombre personalizado y abre WhatsApp"
               >
                 💬 Enviar por WhatsApp
               </button>
