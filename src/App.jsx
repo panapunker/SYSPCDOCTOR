@@ -113,7 +113,6 @@ export function AppProvider({ children }) {
       tipo_equipo: ordenData.tipo_equipo,
       marca_modelo: ordenData.marca_modelo,
       serie: ordenData.serie || '',
-      falla_reportado: ordenData.fallo_reportado,
       fallo_reportado: ordenData.fallo_reportado,
       deja_cargador: ordenData.deja_cargador || false,
       deja_bateria: ordenData.deja_bateria || false,
@@ -190,8 +189,9 @@ export function AppProvider({ children }) {
     const numRemisionGenerado = idConsecutivoStr;
     const valorCobro = orden.total_pagar > 0 ? orden.total_pagar : (orden.valor_estimado || 0);
 
+    const falloStr = orden.fallo_reportado || orden.falla_reportado || 'N/A';
     let itemsRemision = [
-      { descripcion: `Servicio Técnico (${orden.tipo_equipo} - ${orden.marca_modelo}) | Fallo: ${orden.fallo_reportado || orden.falla_reportado} | Diagnóstico: ${orden.diagnostico || 'N/A'}`, cantidad: 1, precio: valorCobro }
+      { descripcion: `Servicio Técnico (${orden.tipo_equipo} - ${orden.marca_modelo}) | Fallo: ${falloStr} | Diagnóstico: ${orden.diagnostico || 'N/A'}`, cantidad: 1, precio: valorCobro }
     ];
 
     let costoTotalCompraAsociada = 0;
@@ -324,7 +324,7 @@ function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-animado flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-md space-y-6">
         <div className="text-center space-y-3">
           {empresa.logoUrl ? (
@@ -372,7 +372,6 @@ function MainApp() {
   const [facturaSeleccionada, setFacturaSeleccionada] = useState(null);
   const [documentoImprimir, setDocumentoImprimir] = useState(null);
   
-  // Estado para ocultar/mostrar la utilidad (Persistente en localStorage)
   const [ocultarUtilidad, setOcultarUtilidad] = useState(() => {
     const saved = localStorage.getItem('techfix_ocultar_utilidad');
     return saved ? JSON.parse(saved) : false;
@@ -504,10 +503,10 @@ function MainApp() {
     : (rolActual ? (typeof rolActual.permisos === 'string' ? JSON.parse(rolActual.permisos) : rolActual.permisos) : {});
 
   return (
-    <div className="flex min-h-screen bg-animado text-slate-100 font-sans">
+    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
       
       {/* BARRA LATERAL */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-5 space-y-6 flex flex-col justify-between shrink-0 no-imprimir shadow-xl">
+      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-5 space-y-6 flex flex-col justify-between shrink-0 no-imprimir">
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             {empresa.logoUrl ? (
@@ -522,13 +521,13 @@ function MainApp() {
           </div>
 
           <nav className="space-y-1.5 text-xs font-semibold">
-            {permisos.crear_orden && <button onClick={() => setTab('nueva_orden')} className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${tab === 'nueva_orden' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 translate-x-1' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>➕ Nueva Orden de Entrada</button>}
-            <button onClick={() => setTab('ordenes')} className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${tab === 'ordenes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 translate-x-1' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>🛠️ Reparaciones y Estado</button>
-            {permisos.ver_clientes && <button onClick={() => setTab('clientes')} className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${tab === 'clientes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 translate-x-1' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>👥 Directorio de Clientes</button>}
-            {permisos.facturar && <button onClick={() => setTab('facturacion')} className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${tab === 'facturacion' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 translate-x-1' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>🧾 Remisiones y Ventas</button>}
-            {permisos.facturar && <button onClick={() => setTab('compras')} className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${tab === 'compras' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 translate-x-1' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>🛒 Compras y Gastos</button>}
-            <button onClick={() => setTab('portal')} className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${tab === 'portal' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 translate-x-1' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>🔍 Portal Consulta Cliente</button>
-            {permisos.ver_configuracion && <button onClick={() => setTab('config')} className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${tab === 'config' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 translate-x-1' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>⚙️ Configuración & Permisos</button>}
+            {permisos.crear_orden && <button onClick={() => setTab('nueva_orden')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'nueva_orden' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>➕ Nueva Orden de Entrada</button>}
+            <button onClick={() => setTab('ordenes')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'ordenes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🛠️ Reparaciones y Estado</button>
+            {permisos.ver_clientes && <button onClick={() => setTab('clientes')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'clientes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>👥 Directorio de Clientes</button>}
+            {permisos.facturar && <button onClick={() => setTab('facturacion')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'facturacion' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🧾 Remisiones y Ventas</button>}
+            {permisos.facturar && <button onClick={() => setTab('compras')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'compras' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🛒 Compras y Gastos</button>}
+            <button onClick={() => setTab('portal')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'portal' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🔍 Portal Consulta Cliente</button>
+            {permisos.ver_configuracion && <button onClick={() => setTab('config')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'config' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>⚙️ Configuración & Permisos</button>}
           </nav>
         </div>
         <div className="pt-4 border-t border-slate-800 text-xs space-y-2">
@@ -537,7 +536,7 @@ function MainApp() {
         </div>
       </aside>
 
-      <main className="flex-1 p-8 overflow-y-auto max-w-7xl mx-auto w-full no-imprimir animate-fade-in">
+      <main className="flex-1 p-8 overflow-y-auto max-w-7xl mx-auto w-full no-imprimir">
         
         {/* 1. CREACIÓN DE NUEVA ORDEN */}
         {tab === 'nueva_orden' && permisos.crear_orden && (
@@ -757,13 +756,12 @@ function MainApp() {
           </div>
         )}
 
-        {/* 4. REMISIONES Y VENTAS (CON BOTÓN DE OCULTAR UTILIDAD) */}
+        {/* 4. REMISIONES Y VENTAS */}
         {tab === 'facturacion' && permisos.facturar && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
             <div className="flex justify-between items-center flex-wrap gap-3">
               <h2 className="text-xl font-bold text-white">Remisiones y Ventas</h2>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Botón para alternar visibilidad de la utilidad */}
                 <button 
                   onClick={toggleOcultarUtilidad} 
                   className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
@@ -787,7 +785,6 @@ function MainApp() {
                     <th className="p-3">Fecha</th>
                     <th className="p-3">Cliente / Vendedor</th>
                     <th className="p-3">Total Venta</th>
-                    {/* Se oculta dinámicamente el encabezado si ocultarUtilidad es true */}
                     {!ocultarUtilidad && <th className="p-3">Utilidad</th>}
                     <th className="p-3 text-right">Detalle</th>
                   </tr>
@@ -808,7 +805,6 @@ function MainApp() {
                         </td>
                         <td className="p-3 font-extrabold text-white">$ {totalVenta.toLocaleString('es-CO')}</td>
                         
-                        {/* Se oculta dinámicamente la celda de utilidad si ocultarUtilidad es true */}
                         {!ocultarUtilidad && (
                           <td className="p-3 font-extrabold text-emerald-400">$ {utilidad.toLocaleString('es-CO')}</td>
                         )}
@@ -1579,7 +1575,7 @@ function PortalPublico() {
   const [mostrarHistorialPortal, setMostrarHistorialPortal] = useState(false);
 
   return (
-    <div className="min-h-screen bg-animado flex flex-col items-center justify-center p-4 text-slate-100 font-sans">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-slate-100 font-sans">
       <div className="max-w-xl w-full mx-auto bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl text-center space-y-4">
         {empresa.logoUrl ? (
           <img src={empresa.logoUrl} alt="Logo" className="w-32 h-32 object-contain mx-auto rounded-xl bg-slate-800 p-2 border border-slate-700 shadow-lg" />
@@ -1682,4 +1678,5 @@ export default function App() {
       <AppContent />
     </AppProvider>
   );
+}
 }
