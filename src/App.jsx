@@ -113,7 +113,6 @@ export function AppProvider({ children }) {
       tipo_equipo: ordenData.tipo_equipo,
       marca_modelo: ordenData.marca_modelo,
       serie: ordenData.serie || '',
-      falla_reportada: ordenData.fallo_reportado,
       fallo_reportado: ordenData.fallo_reportado,
       deja_cargador: ordenData.deja_cargador || false,
       deja_bateria: ordenData.deja_bateria || false,
@@ -372,7 +371,6 @@ function MainApp() {
   const [facturaSeleccionada, setFacturaSeleccionada] = useState(null);
   const [documentoImprimir, setDocumentoImprimir] = useState(null);
   
-  // Estado para ocultar/mostrar la utilidad (Persistente en localStorage)
   const [ocultarUtilidad, setOcultarUtilidad] = useState(() => {
     const saved = localStorage.getItem('techfix_ocultar_utilidad');
     return saved ? JSON.parse(saved) : false;
@@ -478,7 +476,7 @@ function MainApp() {
       csvContent += linea + "\r\n";
     });
 
-    csvContent += `\r\n,,, ,TOTALES DEL PERIODO:,"$${sumaTotalCostos}","$${sumaTotalVentas}","$${sumaTotalGanancias}"\r\n`;
+    csvContent += `\r\n,,, ,TOTALES DEL PERIODOS:,"$${sumaTotalCostos}","$${sumaTotalVentas}","$${sumaTotalGanancias}"\r\n`;
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -757,13 +755,12 @@ function MainApp() {
           </div>
         )}
 
-        {/* 4. REMISIONES Y VENTAS (CON BOTÓN DE OCULTAR UTILIDAD) */}
+        {/* 4. REMISIONES Y VENTAS */}
         {tab === 'facturacion' && permisos.facturar && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
             <div className="flex justify-between items-center flex-wrap gap-3">
               <h2 className="text-xl font-bold text-white">Remisiones y Ventas</h2>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Botón para alternar visibilidad de la utilidad */}
                 <button 
                   onClick={toggleOcultarUtilidad} 
                   className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
@@ -787,7 +784,6 @@ function MainApp() {
                     <th className="p-3">Fecha</th>
                     <th className="p-3">Cliente / Vendedor</th>
                     <th className="p-3">Total Venta</th>
-                    {/* Se oculta dinámicamente el encabezado si ocultarUtilidad es true */}
                     {!ocultarUtilidad && <th className="p-3">Utilidad</th>}
                     <th className="p-3 text-right">Detalle</th>
                   </tr>
@@ -808,7 +804,6 @@ function MainApp() {
                         </td>
                         <td className="p-3 font-extrabold text-white">$ {totalVenta.toLocaleString('es-CO')}</td>
                         
-                        {/* Se oculta dinámicamente la celda de utilidad si ocultarUtilidad es true */}
                         {!ocultarUtilidad && (
                           <td className="p-3 font-extrabold text-emerald-400">$ {utilidad.toLocaleString('es-CO')}</td>
                         )}
@@ -892,7 +887,7 @@ function MainApp() {
                 </div>
                 <p><strong className="text-white">Equipo:</strong> {clienteSeleccionado.tipo_equipo} {clienteSeleccionado.marca_modelo} (S/N: {clienteSeleccionado.serie || 'N/A'})</p>
                 <p className="text-slate-300"><strong>Accesorios:</strong> {clienteSeleccionado.deja_cargador ? '🔌 Cargador ' : ''} {clienteSeleccionado.deja_bateria ? `🔋 Batería (${clienteSeleccionado.serie_bateria || 'S/N'})` : ''} {!clienteSeleccionado.deja_cargador && !clienteSeleccionado.deja_bateria ? 'Ninguno' : ''}</p>
-                <p><strong className="text-white">Fallo Reportado:</strong> {clienteSeleccionado.fallo_reportado || clienteSeleccionado.falla_reportado}</p>
+                <p><strong className="text-white">Fallo Reportado:</strong> {clienteSeleccionado.fallo_reportado}</p>
                 <p><strong className="text-white">Diagnóstico Técnico:</strong> {clienteSeleccionado.diagnostico || 'Equipo en proceso de revisión.'}</p>
                 
                 {clienteSeleccionado.numero_factura_asociada && (
@@ -1175,7 +1170,7 @@ function MainApp() {
                     <p className="font-bold text-white">Código: {o.codigo_seguimiento} | Estado: <span className="text-amber-400">{o.estado}</span></p>
                     <p className="text-slate-300">Equipo: {o.tipo_equipo} {o.marca_modelo} (S/N: {o.serie || 'N/A'})</p>
                     <p className="text-slate-400">Accesorios: {o.deja_cargador ? '🔌 Cargador ' : ''} {o.deja_bateria ? `🔋 Batería (${o.serie_bateria || 'S/N'})` : ''}</p>
-                    <p className="text-slate-400">Fallo: {o.fallo_reportado || o.falla_reportado}</p>
+                    <p className="text-slate-400">Fallo: {o.fallo_reportado}</p>
                     <p className="text-slate-400">Diagnóstico: {o.diagnostico || 'En proceso'}</p>
                   </div>
                 ))
@@ -1510,7 +1505,7 @@ function MainApp() {
                   </div>
                   <p><strong>Equipo:</strong> {documentoImprimir.data.tipo_equipo} {documentoImprimir.data.marca_modelo} (S/N: {documentoImprimir.data.serie || 'N/A'})</p>
                   <p><strong>Accesorios:</strong> {documentoImprimir.data.deja_cargador ? '🔌 Cargador ' : ''} {documentoImprimir.data.deja_bateria ? `🔋 Batería (${documentoImprimir.data.serie_bateria || 'S/N'})` : ''} {!documentoImprimir.data.deja_cargador && !documentoImprimir.data.deja_bateria ? 'Ninguno' : ''}</p>
-                  <p><strong>Fallo Reportado:</strong> {documentoImprimir.data.fallo_reportado || documentoImprimir.data.falla_reportado}</p>
+                  <p><strong>Fallo Reportado:</strong> {documentoImprimir.data.fallo_reportado}</p>
                   <p><strong>Diagnóstico Actual:</strong> {documentoImprimir.data.diagnostico || 'En proceso'}</p>
                   
                   <div className="flex gap-4">
@@ -1616,7 +1611,7 @@ function PortalPublico() {
             </div>
             <p className="text-white"><strong>Equipo:</strong> {ordenConsultaResult.tipo_equipo} {ordenConsultaResult.marca_modelo}</p>
             <p className="text-slate-300"><strong>Accesorios:</strong> {ordenConsultaResult.deja_cargador ? '🔌 Cargador ' : ''} {ordenConsultaResult.deja_bateria ? `🔋 Batería (${ordenConsultaResult.serie_bateria || 'S/N'})` : ''} {!ordenConsultaResult.deja_cargador && !ordenConsultaResult.deja_bateria ? 'Ninguno' : ''}</p>
-            <p className="text-white"><strong>Fallo Reportado:</strong> {ordenConsultaResult.fallo_reportado || ordenConsultaResult.falla_reportado}</p>
+            <p className="text-white"><strong>Fallo Reportado:</strong> {ordenConsultaResult.fallo_reportado}</p>
             <p className="text-white"><strong>Diagnóstico Técnico:</strong> {ordenConsultaResult.diagnostico || 'Equipo en proceso de revisión.'}</p>
             
             {ordenConsultaResult.numero_factura_asociada && (
