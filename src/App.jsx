@@ -7,7 +7,7 @@ import { supabase } from './lib/supabase';
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-  const [empresa, setEmpresa] = useState({ nombre: 'Cargando...', telefono: '', direccion: '', email: '', logoUrl: '' });
+  const [empresa, setEmpresa] = useState({ nombre: 'Cargando...', telefono: '', direccion: '', email: '', logoUrl: '', rutaDescargaPdf: 'Descargas predeterminadas del navegador' });
   const [roles, setRoles] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -30,10 +30,11 @@ export function AppProvider({ children }) {
         setEmpresa({ 
           ...resEmp.data[0], 
           email: resEmp.data[0].email || 'contacto@syspcdoctor.com',
-          logoUrl: resEmp.data[0].logo_url 
+          logoUrl: resEmp.data[0].logo_url,
+          rutaDescargaPdf: resEmp.data[0].ruta_descarga_pdf || 'Descargas predeterminadas del navegador'
         });
       } else {
-        setEmpresa({ nombre: 'Taller (Falta Configurar)', telefono: '', direccion: '', email: '', logoUrl: '' });
+        setEmpresa({ nombre: 'Taller (Falta Configurar)', telefono: '', direccion: '', email: '', logoUrl: '', rutaDescargaPdf: 'Descargas predeterminadas del navegador' });
       }
 
       const resRol = await supabase.from('roles').select('*');
@@ -187,7 +188,6 @@ export function AppProvider({ children }) {
     const cliEncontrado = clientes.find(c => c.nombre.toLowerCase() === orden.cliente_nombre.toLowerCase());
     const telCliente = cliEncontrado ? cliEncontrado.telefono : (orden.cliente_telefono || 'N/A');
     
-    // Consecutivo REM-10001
     const consecutivoNum = 10001 + facturas.length;
     const numRemisionGenerado = `REM-${consecutivoNum}`;
     const valorCobro = orden.total_pagar > 0 ? orden.total_pagar : (orden.valor_estimado || 0);
@@ -243,7 +243,6 @@ export function AppProvider({ children }) {
     const nombreCliente = clienteObj ? clienteObj.nombre : 'Cliente Mostrador';
     const telefonoCliente = clienteObj ? (clienteObj.telefono || 'N/A') : 'N/A';
     
-    // Consecutivo REM-10001
     const consecutivoNum = 10001 + facturas.length;
     const numRemisionGenerado = `REM-${consecutivoNum}`;
 
@@ -290,7 +289,14 @@ export function AppProvider({ children }) {
   };
 
   const actualizarEmpresa = async (datos) => {
-    const updateData = { nombre: datos.nombre, telefono: datos.telefono, email: datos.email, direccion: datos.direccion, logo_url: datos.logoUrl };
+    const updateData = { 
+      nombre: datos.nombre, 
+      telefono: datos.telefono, 
+      email: datos.email, 
+      direccion: datos.direccion, 
+      logo_url: datos.logoUrl,
+      ruta_descarga_pdf: datos.rutaDescargaPdf
+    };
     const { data: ext } = await supabase.from('empresa').select('id').limit(1);
     
     if (ext && ext.length > 0) {
@@ -970,6 +976,13 @@ function MainApp() {
                   <div className="flex items-center gap-3 mt-1">{empresa.logoUrl && <img src={empresa.logoUrl} className="w-16 h-16 object-contain bg-slate-800 border rounded-lg p-1" />} <input type="file" accept="image/*" onChange={handleLogoUpload} className="text-xs text-white file:bg-indigo-600 file:text-white file:rounded-xl file:border-0 file:px-3 file:py-1.5 cursor-pointer" /></div>
                 </div>
                 <div><label className="text-slate-400">Nombre de la Empresa</label><input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.nombre} onChange={e => setEmpresa({ ...empresa, nombre: e.target.value })} /></div>
+                
+                <div>
+                  <label className="text-slate-400 font-bold block mb-1">📁 Carpeta / Ruta predeterminada de descarga de PDF para WhatsApp</label>
+                  <input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.rutaDescargaPdf} onChange={e => setEmpresa({ ...empresa, rutaDescargaPdf: e.target.value })} placeholder="Ej. C:/Users/TuUsuario/Downloads" />
+                  <p className="text-[11px] text-slate-500 mt-1">Nota: Los navegadores descargan por defecto en la carpeta de descargas configurada en tu navegador web.</p>
+                </div>
+
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className="text-slate-400">Teléfono</label><input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.telefono} onChange={e => setEmpresa({ ...empresa, telefono: e.target.value })} /></div>
                   <div><label className="text-slate-400">Correo</label><input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.email} onChange={e => setEmpresa({ ...empresa, email: e.target.value })} /></div>
@@ -1586,22 +1599,23 @@ function MainApp() {
                   const doc = documentoImprimir.data;
                   const tel = doc.cliente_telefono || '3000000000';
                   
-                  // Generar archivo PDF automáticamente en las descargas para adjuntar
+                  // Descarga automática en la carpeta predeterminada para adjuntar de inmediato
                   const elHtml = document.getElementById('seccion-impresion').innerHTML;
                   const blob = new Blob([`<html><head><title>Comprobante</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:8px;}</style></head><body>${elHtml}</body></html>`], { type: 'text/html' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = `${documentoImprimir.tipo === 'FACTURA' ? doc.numero_factura : 'orden_servicio'}.html`;
+                  const nombreArchivo = documentoImprimir.tipo === 'FACTURA' ? `${doc.numero_factura}.html` : `orden_${doc.codigo_seguimiento}.html`;
+                  a.download = nombreArchivo;
                   document.body.appendChild(a);
                   a.click();
                   document.body.removeChild(a);
 
                   let msg = '';
                   if (documentoImprimir.tipo === 'FACTURA') {
-                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Remisión *${doc.numero_factura}* en *${empresa.nombre}*.\n\n📅 Fecha: ${doc.fecha}\n💰 Total: $ ${Number(doc.total || 0).toLocaleString('es-CO')}\n\n¡Gracias por tu preferencia! *(Hemos descargado tu archivo en la PC para que puedas adjuntarlo aquí)*`;
+                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Remisión *${doc.numero_factura}* en *${empresa.nombre}*.\n\n📅 Fecha: ${doc.fecha}\n💰 Total: $ ${Number(doc.total || 0).toLocaleString('es-CO')}\n\n¡Gracias por tu preferencia!`;
                   } else {
-                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos el comprobante de tu Orden de Entrada *${documentoImprimir.idConsecutivo || 'N/A'}* (${doc.tipo_equipo} ${doc.marca_modelo}) en *${empresa.nombre}*.\n\n🔑 Código de seguimiento: *${doc.codigo_seguimiento}*\n📌 Estado: *${doc.estado}*\n\nPuedes consultar el estado en cualquier momento en nuestro portal.`;
+                    msg = `Hola *${doc.cliente_nombre}* 👋\n\nTe enviamos los detalles de tu Orden de Entrada *${documentoImprimir.idConsecutivo || 'N/A'}* en *${empresa.nombre}*.\n\n📅 Fecha: ${new Date().toISOString().split('T')[0]}\n🔑 Código de seguimiento: *${doc.codigo_seguimiento}*\n📌 Estado: *${doc.estado}*`;
                   }
                   window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`, '_blank');
                 }} 
