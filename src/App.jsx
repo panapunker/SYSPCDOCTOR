@@ -1683,4 +1683,3 @@ export default function App() {
     </AppProvider>
   );
 }
-}
