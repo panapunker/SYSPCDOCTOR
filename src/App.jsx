@@ -121,6 +121,8 @@ export function AppProvider({ children }) {
       repuesto_compra_id: ordenData.repuesto_compra_id ? Number(ordenData.repuesto_compra_id) : null,
       valor_estimado: Number(ordenData.valor_estimado) || 0,
       total_pagar: 0,
+      garantia_incluye: ordenData.garantia_incluye || false,
+      garantia_tiempo: ordenData.garantia_tiempo || '',
       usuario_creador: nombreUsuario || 'Sistema',
       estado: 'Ingresado',
       observaciones: [{ fecha: new Date().toLocaleString('es-CO'), texto: `Orden registrada por ${nombreUsuario || 'Sistema'}.` }]
@@ -136,7 +138,7 @@ export function AppProvider({ children }) {
     return insertada[0];
   };
 
-  const actualizarOrden = async (id, estado, obs, diag, presupuesto, totalPagar, repuestoCompraId = null, remisionAsociada = null) => {
+  const actualizarOrden = async (id, estado, obs, diag, presupuesto, totalPagar, repuestoCompraId = null, remisionAsociada = null, garantiaIncluye = false, garantiaTiempo = '') => {
     const ordenObj = ordenes.find(o => o.id === id);
     if (!ordenObj) return;
 
@@ -151,6 +153,8 @@ export function AppProvider({ children }) {
       valor_estimado: presupuesto !== undefined ? Number(presupuesto) : ordenObj.valor_estimado,
       total_pagar: totalPagar !== undefined ? Number(totalPagar) : (ordenObj.total_pagar || 0),
       repuesto_compra_id: repuestoCompraId !== undefined ? (repuestoCompraId ? Number(repuestoCompraId) : null) : ordenObj.repuesto_compra_id,
+      garantia_incluye: garantiaIncluye !== undefined ? garantiaIncluye : (ordenObj.garantia_incluye || false),
+      garantia_tiempo: garantiaTiempo !== undefined ? garantiaTiempo : (ordenObj.garantia_tiempo || ''),
       observaciones: obsArr,
       ...(remisionAsociada ? { numero_factura_asociada: remisionAsociada } : {})
     };
@@ -184,7 +188,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  const remisionarOrden = async (orden, nombreUsuario, itemCompraSeleccionado = null) => {
+  const remisionarOrden = async (orden, nombreUsuario, itemCompraSeleccionado = null, garantiaIncluye = false, garantiaTiempo = '') => {
     const cliEncontrado = clientes.find(c => c.nombre.toLowerCase() === orden.cliente_nombre.toLowerCase());
     const telCliente = cliEncontrado ? cliEncontrado.telefono : (orden.cliente_telefono || 'N/A');
     
@@ -224,13 +228,15 @@ export function AppProvider({ children }) {
       costo_compra: costoTotalCompraAsociada,
       tipo: 'Servicio Técnico',
       usuario_creador: nombreUsuario || 'Sistema',
+      garantia_incluye: garantiaIncluye,
+      garantia_tiempo: garantiaTiempo,
       items: itemsRemision
     };
 
     const { data: insertada, error } = await supabase.from('facturas').insert([nuevaFac]).select();
     if (!error && insertada) {
       setFacturas(prev => [insertada[0], ...prev]);
-      await actualizarOrden(orden.id, 'Entregado / Remisionado', 'Equipo entregado y remisionado bajo ' + numRemisionGenerado, orden.diagnostico, orden.valor_estimado, totalFinalFac, orden.repuesto_compra_id, numRemisionGenerado);
+      await actualizarOrden(orden.id, 'Entregado / Remisionado', 'Equipo entregado y remisionado bajo ' + numRemisionGenerado, orden.diagnostico, orden.valor_estimado, totalFinalFac, orden.repuesto_compra_id, numRemisionGenerado, garantiaIncluye, garantiaTiempo);
       return insertada[0];
     } else {
       console.error(error);
@@ -239,7 +245,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  const agregarVentaDirecta = async (clienteObj, itemsArray, totalCalculado, costoCompraTotal, nombreUsuario) => {
+  const agregarVentaDirecta = async (clienteObj, itemsArray, totalCalculado, costoCompraTotal, nombreUsuario, garantiaIncluye = false, garantiaTiempo = '') => {
     const nombreCliente = clienteObj ? clienteObj.nombre : 'Cliente Mostrador';
     const telefonoCliente = clienteObj ? (clienteObj.telefono || 'N/A') : 'N/A';
     
@@ -255,6 +261,8 @@ export function AppProvider({ children }) {
       costo_compra: costoCompraTotal || 0,
       tipo: 'Venta de Repuestos',
       usuario_creador: nombreUsuario || 'Sistema',
+      garantia_incluye: garantiaIncluye,
+      garantia_tiempo: garantiaTiempo,
       items: itemsArray
     };
 
@@ -427,10 +435,12 @@ function MainApp() {
     deja_cargador: false,
     deja_bateria: false,
     serie_bateria: '',
-    repuesto_compra_id: ''
+    repuesto_compra_id: '',
+    garantia_incluye: false,
+    garantia_tiempo: ''
   });
 
-  const [editOrdForm, setEditOrdForm] = useState({ estado: '', observacion: '', diagnostico: '', presupuesto: 0, totalPagar: 0, repuestoCompraId: '' });
+  const [editOrdForm, setEditOrdForm] = useState({ estado: '', observacion: '', diagnostico: '', presupuesto: 0, totalPagar: 0, repuestoCompraId: '', garantiaIncluye: false, garantiaTiempo: '' });
   
   const [tipoClienteVentaOpt, setTipoClienteVentaOpt] = useState('EXISTENTE');
   const [busquedaClienteVenta, setBusquedaClienteVenta] = useState('');
@@ -438,6 +448,8 @@ function MainApp() {
   const [formNuevoClienteVenta, setFormNuevoClienteVenta] = useState({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
   const [itemsVenta, setItemsVenta] = useState([{ descripcion: '', cantidad: 1, precio: 0 }]);
   const [compraSeleccionadaVentaId, setCompraSeleccionadaVentaId] = useState('');
+  const [ventaGarantiaIncluye, setVentaGarantiaIncluye] = useState(false);
+  const [ventaGarantiaTiempo, setVentaGarantiaTiempo] = useState('');
 
   const [formCompra, setFormCompra] = useState({ proveedor: '', descripcion_producto: '', costo: 0, precio_venta_sugerido: 0 });
   const [mostrarHistorialPortal, setMostrarHistorialPortal] = useState(false);
@@ -685,6 +697,28 @@ function MainApp() {
                 )}
               </div>
 
+              <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 accent-indigo-600 rounded" 
+                    checked={formOrden.garantia_incluye} 
+                    onChange={e => setFormOrden({ ...formOrden, garantia_incluye: e.target.checked })} 
+                  />
+                  🛡️ ¿Incluir Garantía en esta orden?
+                </label>
+                {formOrden.garantia_incluye && (
+                  <div>
+                    <input 
+                      placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
+                      className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" 
+                      value={formOrden.garantia_tiempo} 
+                      onChange={e => setFormOrden({ ...formOrden, garantia_tiempo: e.target.value })} 
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
                 <label className="text-xs font-bold text-amber-400 block mb-1">🛒 Asociar Repuesto/Insumo de Compras (Opcional)</label>
                 <select 
@@ -722,7 +756,7 @@ function MainApp() {
                   setTab('ordenes');
                   setClienteSeleccionado(null);
                   setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
-                  setFormOrden({ tipo_equipo: 'PORTATIL', marca_modelo: '', serie: '', fallo_reportado: '', valor_estimado: 0, deja_cargador: false, deja_bateria: false, serie_bateria: '', repuesto_compra_id: '' });
+                  setFormOrden({ tipo_equipo: 'PORTATIL', marca_modelo: '', serie: '', fallo_reportado: '', valor_estimado: 0, deja_cargador: false, deja_bateria: false, serie_bateria: '', repuesto_compra_id: '', garantia_incluye: false, garantia_tiempo: '' });
                 }
               }}
               className="w-full bg-indigo-600 hover:bg-indigo-500 font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-indigo-600/30 text-white"
@@ -866,6 +900,7 @@ function MainApp() {
                             <div className="flex gap-2 mt-1 text-[10px]">
                               {o.deja_cargador && <span className="bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">🔌 Cargador</span>}
                               {o.deja_bateria && <span className="bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">🔋 Batería {o.serie_bateria ? `(${o.serie_bateria})` : ''}</span>}
+                              {o.garantia_incluye && <span className="bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-800">🛡️ Garantía: {o.garantia_tiempo || 'Sí'}</span>}
                             </div>
                           </td>
                           <td className="p-3"><span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold">{o.estado}</span></td>
@@ -879,10 +914,10 @@ function MainApp() {
                             )}
                           </td>
                           <td className="p-3 text-right space-x-1">
-                            {permisos.editar_diagnostico && <button onClick={() => { setModalEditOrden(o); setEditOrdForm({ estado: o.estado, observacion: '', diagnostico: o.diagnostico || '', presupuesto: o.valor_estimado || 0, totalPagar: o.total_pagar || 0, repuestoCompraId: o.repuesto_compra_id || '' }); }} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">✏️ Diagnóstico</button>}
+                            {permisos.editar_diagnostico && <button onClick={() => { setModalEditOrden(o); setEditOrdForm({ estado: o.estado, observacion: '', diagnostico: o.diagnostico || '', presupuesto: o.valor_estimado || 0, totalPagar: o.total_pagar || 0, repuestoCompraId: o.repuesto_compra_id || '', garantiaIncluye: o.garantia_incluye || false, garantiaTiempo: o.garantia_tiempo || '' }); }} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">✏️ Diagnóstico</button>}
                             <button onClick={() => enviarWhatsApp(o, idRegistroConsecutivo)} className="bg-emerald-600 text-white px-2 py-1 rounded text-[11px]">💬 WhatsApp</button>
                             <button onClick={() => setDocumentoImprimir({ tipo: 'ORDEN', data: o, idConsecutivo: idRegistroConsecutivo })} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">🖨️ PDF</button>
-                            {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, compraId: o.repuesto_compra_id || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
+                            {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, compraId: o.repuesto_compra_id || '', garantiaIncluye: o.garantia_incluye || false, garantiaTiempo: o.garantia_tiempo || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
                           </td>
                         </tr>
                       );
@@ -983,7 +1018,7 @@ function MainApp() {
                   {ocultarUtilidad ? '🔒 Utilidad Oculta' : '👁️ Ocultar Utilidad'}
                 </button>
                 <button onClick={() => setModalReporteExcel(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition">📊 Descargar Reporte Excel</button>
-                <button onClick={() => { setModalVenta(true); setTipoClienteVentaOpt('EXISTENTE'); setClienteVentaSeleccionado(null); setCompraSeleccionadaVentaId(''); }} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold">+ Venta Directa</button>
+                <button onClick={() => { setModalVenta(true); setTipoClienteVentaOpt('EXISTENTE'); setClienteVentaSeleccionado(null); setCompraSeleccionadaVentaId(''); setVentaGarantiaIncluye(false); setVentaGarantiaTiempo(''); }} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold">+ Venta Directa</button>
               </div>
             </div>
 
@@ -1168,6 +1203,9 @@ function MainApp() {
                 </div>
                 <p><strong className="text-white">Equipo:</strong> {clienteSeleccionado.tipo_equipo} {clienteSeleccionado.marca_modelo} (S/N: {clienteSeleccionado.serie || 'N/A'})</p>
                 <p className="text-slate-300"><strong>Accesorios:</strong> {clienteSeleccionado.deja_cargador ? '🔌 Cargador ' : ''} {clienteSeleccionado.deja_bateria ? `🔋 Batería (${clienteSeleccionado.serie_bateria || 'S/N'})` : ''} {!clienteSeleccionado.deja_cargador && !clienteSeleccionado.deja_bateria ? 'Ninguno' : ''}</p>
+                {clienteSeleccionado.garantia_incluye && (
+                  <p className="text-emerald-400"><strong>🛡️ Garantía:</strong> {clienteSeleccionado.garantia_tiempo || 'Incluida'}</p>
+                )}
                 <p><strong className="text-white">Fallo Reportado:</strong> {clienteSeleccionado.fallo_reportado || clienteSeleccionado.falla_reportado}</p>
                 <p><strong className="text-white">Diagnóstico Técnico:</strong> {clienteSeleccionado.diagnostico || 'Equipo en proceso de revisión.'}</p>
                 
@@ -1380,6 +1418,28 @@ function MainApp() {
               <textarea className="w-full bg-slate-800 p-2 rounded-xl text-xs text-white" rows={2} value={editOrdForm.diagnostico} onChange={e => setEditOrdForm({ ...editOrdForm, diagnostico: e.target.value })} placeholder="Diagnóstico técnico..." />
             </div>
 
+            <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 accent-indigo-600 rounded" 
+                  checked={editOrdForm.garantiaIncluye} 
+                  onChange={e => setEditOrdForm({ ...editOrdForm, garantiaIncluye: e.target.checked })} 
+                />
+                🛡️ ¿Incluir / Actualizar Garantía?
+              </label>
+              {editOrdForm.garantiaIncluye && (
+                <div>
+                  <input 
+                    placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
+                    className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" 
+                    value={editOrdForm.garantiaTiempo} 
+                    onChange={e => setEditOrdForm({ ...editOrdForm, garantiaTiempo: e.target.value })} 
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
               <label className="text-xs font-bold text-amber-400 block mb-1">🛒 Asociar o Cambiar Repuesto de Compras</label>
               <select 
@@ -1413,7 +1473,7 @@ function MainApp() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setModalEditOrden(null)} className="text-xs text-slate-400 px-3">Cancelar</button>
               <button onClick={async () => { 
-                await actualizarOrden(modalEditOrden.id, editOrdForm.estado, editOrdForm.observacion, editOrdForm.diagnostico, editOrdForm.presupuesto, editOrdForm.totalPagar, editOrdForm.repuestoCompraId); 
+                await actualizarOrden(modalEditOrden.id, editOrdForm.estado, editOrdForm.observacion, editOrdForm.diagnostico, editOrdForm.presupuesto, editOrdForm.totalPagar, editOrdForm.repuestoCompraId, null, editOrdForm.garantiaIncluye, editOrdForm.garantiaTiempo); 
                 setModalEditOrden(null); 
               }} className="bg-indigo-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold">Guardar Cambios</button>
             </div>
@@ -1458,6 +1518,7 @@ function MainApp() {
                     <p className="font-bold text-white">Código: {o.codigo_seguimiento} | Estado: <span className="text-amber-400">{o.estado}</span></p>
                     <p className="text-slate-300">Equipo: {o.tipo_equipo} {o.marca_modelo} (S/N: {o.serie || 'N/A'})</p>
                     <p className="text-slate-400">Accesorios: {o.deja_cargador ? '🔌 Cargador ' : ''} {o.deja_bateria ? `🔋 Batería (${o.serie_bateria || 'S/N'})` : ''}</p>
+                    {o.garantia_incluye && <p className="text-emerald-400">Garantía: {o.garantia_tiempo || 'Sí'}</p>}
                     <p className="text-slate-400">Fallo: {o.fallo_reportado || o.falla_reportado}</p>
                     <p className="text-slate-400">Diagnóstico: {o.diagnostico || 'En proceso'}</p>
                   </div>
@@ -1550,6 +1611,28 @@ function MainApp() {
               </select>
             </div>
 
+            <div className="space-y-2 pt-2 bg-slate-800/50 p-3 rounded-xl border border-slate-800">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 accent-indigo-600 rounded" 
+                  checked={ventaGarantiaIncluye} 
+                  onChange={e => setVentaGarantiaIncluye(e.target.checked)} 
+                />
+                🛡️ ¿Incluir Garantía en esta venta?
+              </label>
+              {ventaGarantiaIncluye && (
+                <div>
+                  <input 
+                    placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
+                    className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" 
+                    value={ventaGarantiaTiempo} 
+                    onChange={e => setVentaGarantiaTiempo(e.target.value)} 
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2 pt-2">
               <label className="text-xs font-bold text-slate-400 uppercase">Artículos / Ítems en Factura</label>
               {itemsVenta.map((it, idx) => (
@@ -1588,7 +1671,7 @@ function MainApp() {
                 }
                 
                 const nombreUsrActual = usuarioSesion ? usuarioSesion.nombre : 'Admin';
-                const fac = await agregarVentaDirecta(clienteFinalObj, itemsVenta, total, costoCompraTotal, nombreUsrActual);
+                const fac = await agregarVentaDirecta(clienteFinalObj, itemsVenta, total, costoCompraTotal, nombreUsrActual, ventaGarantiaIncluye, ventaGarantiaTiempo);
                 setModalVenta(false);
                 if(fac) {
                   alert('¡Remisión creada con éxito!');
@@ -1618,7 +1701,28 @@ function MainApp() {
                   <option key={c.id} value={c.id}>{c.descripcion_producto} (Venta sugerida: ${c.precio_venta_sugerido})</option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-500">Nota: El producto seleccionado se sumará al total de la remisión del cliente y su costo se restará en informes internos para calcular tu utilidad real.</p>
+            </div>
+
+            <div className="space-y-2 pt-2 bg-slate-800/50 p-3 rounded-xl border border-slate-800">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 accent-indigo-600 rounded" 
+                  checked={modalRemisionarOrden.garantiaIncluye} 
+                  onChange={e => setModalRemisionarOrden({ ...modalRemisionarOrden, garantiaIncluye: e.target.checked })} 
+                />
+                🛡️ ¿Incluir / Actualizar Garantía en esta remisión?
+              </label>
+              {modalRemisionarOrden.garantiaIncluye && (
+                <div>
+                  <input 
+                    placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
+                    className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" 
+                    value={modalRemisionarOrden.garantiaTiempo} 
+                    onChange={e => setModalRemisionarOrden({ ...modalRemisionarOrden, garantiaTiempo: e.target.value })} 
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-3">
@@ -1630,7 +1734,7 @@ function MainApp() {
                   itemCompraObj = compras.find(c => c.id.toString() === modalRemisionarOrden.compraId.toString());
                 }
 
-                const fac = await remisionarOrden(modalRemisionarOrden.orden, nombreUsrActual, itemCompraObj);
+                const fac = await remisionarOrden(modalRemisionarOrden.orden, nombreUsrActual, itemCompraObj, modalRemisionarOrden.garantiaIncluye, modalRemisionarOrden.garantiaTiempo);
                 setModalRemisionarOrden(null);
                 if(fac){
                   alert('¡Remisión Generada Correctamente!');
@@ -1728,6 +1832,9 @@ function MainApp() {
             <p className="text-xs text-slate-300"><strong>Teléfono:</strong> {facturaSeleccionada.cliente_telefono || 'N/A'}</p>
             <p className="text-xs text-slate-300"><strong>Vendedor:</strong> <span className="text-indigo-300 font-semibold">{facturaSeleccionada.usuario_creador || 'Sistema'}</span></p>
             <p className="text-xs text-slate-300"><strong>Tipo Operación:</strong> {facturaSeleccionada.tipo}</p>
+            {facturaSeleccionada.garantia_incluye && (
+              <p className="text-xs text-emerald-400"><strong>🛡️ Garantía:</strong> {facturaSeleccionada.garantia_tiempo || 'Sí'}</p>
+            )}
 
             <div className="border border-slate-800 rounded-xl overflow-hidden max-h-40 overflow-y-auto">
               <table className="w-full text-left text-xs text-slate-300">
@@ -1760,8 +1867,8 @@ function MainApp() {
 
       {documentoImprimir && (
         <div className="fixed inset-0 bg-slate-950/90 flex items-center justify-center p-4 z-50">
-          <div className="bg-white text-slate-900 w-full max-w-xl p-5 rounded-2xl space-y-2 shadow-2xl h-[50vh] max-h-[50vh] overflow-y-auto flex flex-col justify-between border-b-2 border-dashed border-slate-400">
-            <div id="seccion-impresion" className="space-y-2 text-[17px]">
+          <div className="bg-white text-slate-900 w-full max-w-xl p-5 rounded-2xl space-y-2 shadow-2xl h-[70vh] max-h-[85vh] overflow-y-auto flex flex-col justify-between border-b-2 border-dashed border-slate-400">
+            <div id="seccion-impresion" className="space-y-2 text-[15px]">
               
               <div className="flex items-center justify-between border-b pb-1 gap-2">
                 <div className="flex items-center gap-2">
@@ -1779,9 +1886,9 @@ function MainApp() {
               </div>
 
               {documentoImprimir.tipo === 'ORDEN' && (
-                <div className="space-y-1.5 text-base">
+                <div className="space-y-1.5 text-sm">
                   {documentoImprimir.idConsecutivo && (
-                    <p className="text-lg"><strong>N° Registro:</strong> <span className="font-black text-indigo-700">{documentoImprimir.idConsecutivo}</span></p>
+                    <p className="text-base"><strong>N° Registro:</strong> <span className="font-black text-indigo-700">{documentoImprimir.idConsecutivo}</span></p>
                   )}
                   <div className="grid grid-cols-2 gap-1">
                     <p><strong>Cliente:</strong> {documentoImprimir.data.cliente_nombre}</p>
@@ -1801,15 +1908,15 @@ function MainApp() {
                       <p><strong>Presupuesto Est.:</strong> $ {Number(documentoImprimir.data.valor_estimado).toLocaleString('es-CO')}</p>
                     )}
                     {Number(documentoImprimir.data.total_pagar) > 0 && (
-                      <p className="font-bold text-emerald-700 text-lg"><strong>Total a Pagar:</strong> $ {Number(documentoImprimir.data.total_pagar).toLocaleString('es-CO')}</p>
+                      <p className="font-bold text-emerald-700 text-base"><strong>Total a Pagar:</strong> $ {Number(documentoImprimir.data.total_pagar).toLocaleString('es-CO')}</p>
                     )}
                   </div>
                 </div>
               )}
 
               {documentoImprimir.tipo === 'FACTURA' && (
-                <div className="space-y-1.5 text-base">
-                  <div className="flex justify-between text-lg">
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between text-base">
                     <p><strong>Remisión N°:</strong> <span className="font-black text-indigo-700">{documentoImprimir.data.numero_factura}</span></p>
                     <p><strong>Fecha:</strong> {documentoImprimir.data.fecha}</p>
                   </div>
@@ -1818,7 +1925,7 @@ function MainApp() {
                     <p><strong>Vendedor:</strong> {documentoImprimir.data.usuario_creador || 'Sistema'}</p>
                   </div>
 
-                  <table className="w-full text-left border border-slate-300 mt-1 text-base">
+                  <table className="w-full text-left border border-slate-300 mt-1 text-sm">
                     <thead className="bg-slate-100">
                       <tr><th className="p-1.5 border">Descripción</th><th className="p-1.5 text-center border">Cant.</th><th className="p-1.5 text-right border">Precio</th></tr>
                     </thead>
@@ -1828,20 +1935,31 @@ function MainApp() {
                       ))}
                     </tbody>
                   </table>
-                  <p className="font-black text-emerald-700 text-xl text-right mt-1">Total a Pagar: $ {(documentoImprimir.data.total || 0).toLocaleString('es-CO')}</p>
-
-                  <div className="mt-1.5 pt-1.5 border-t border-dashed border-slate-300 grid grid-cols-2 gap-3 text-sm">
-                    <div className="border border-slate-300 p-2 rounded h-14 flex flex-col justify-between">
-                      <span className="font-bold text-slate-600 uppercase text-xs">Garantía:</span>
-                      <div className="border-b border-dotted border-slate-400 w-full mb-1"></div>
-                      <div className="border-b border-dotted border-slate-400 w-full"></div>
-                    </div>
-                    <div className="border border-slate-300 p-2 rounded h-14 flex flex-col items-center justify-end text-center">
-                      <span className="text-xs text-slate-400 font-bold uppercase">Sello / Firma</span>
-                    </div>
-                  </div>
+                  <p className="font-black text-emerald-700 text-lg text-right mt-1">Total a Pagar: $ {(documentoImprimir.data.total || 0).toLocaleString('es-CO')}</p>
                 </div>
               )}
+
+              {/* ZONA DE GARANTÍA MODIFICABLE */}
+              <div className="mt-2 pt-2 border-t border-slate-300 text-[11px] leading-relaxed text-slate-700 bg-slate-50 p-2.5 rounded-lg border">
+                <p className="font-bold uppercase text-indigo-800 mb-1">
+                  Condiciones de Garantía {documentoImprimir.data.garantia_incluye && documentoImprimir.data.garantia_tiempo ? `(Tiempo: ${documentoImprimir.data.garantia_tiempo})` : '(No aplica / Sin garantía especificada)'}
+                </p>
+                <p>
+                  Para efectos de Garantía se necesita copia de la factura y la mercancía con todos los accesorios y empaques originales, no se dará garantía por daños ocasionados por alto voltaje, golpes, deterioro o desconfiguración de la máquina, software, virus o por levantar los sellos de seguridad. La garantía es directamente con el centro de servicio o en el almacén. Por ninguna excepción se hace servicio a domicilio.
+                </p>
+              </div>
+
+              <div className="mt-2 pt-1 border-t border-dashed border-slate-300 grid grid-cols-2 gap-3 text-sm">
+                <div className="border border-slate-300 p-2 rounded h-14 flex flex-col justify-between">
+                  <span className="font-bold text-slate-600 uppercase text-xs">Observaciones / Firma:</span>
+                  <div className="border-b border-dotted border-slate-400 w-full mb-1"></div>
+                  <div className="border-b border-dotted border-slate-400 w-full"></div>
+                </div>
+                <div className="border border-slate-300 p-2 rounded h-14 flex flex-col items-center justify-end text-center">
+                  <span className="text-xs text-slate-400 font-bold uppercase">Sello / Firma</span>
+                </div>
+              </div>
+
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t no-imprimir">
@@ -1934,6 +2052,9 @@ function PortalPublico() {
             </div>
             <p className="text-white"><strong>Equipo:</strong> {ordenConsultaResult.tipo_equipo} {ordenConsultaResult.marca_modelo}</p>
             <p className="text-slate-300"><strong>Accesorios:</strong> {ordenConsultaResult.deja_cargador ? '🔌 Cargador ' : ''} {ordenConsultaResult.deja_bateria ? `🔋 Batería (${ordenConsultaResult.serie_bateria || 'S/N'})` : ''} {!ordenConsultaResult.deja_cargador && !ordenConsultaResult.deja_bateria ? 'Ninguno' : ''}</p>
+            {ordenConsultaResult.garantia_incluye && (
+              <p className="text-emerald-400"><strong>🛡️ Garantía:</strong> {ordenConsultaResult.garantia_tiempo || 'Incluida'}</p>
+            )}
             <p className="text-white"><strong>Fallo Reportado:</strong> {ordenConsultaResult.fallo_reportado || ordenConsultaResult.falla_reportado}</p>
             <p className="text-white"><strong>Diagnóstico Técnico:</strong> {ordenConsultaResult.diagnostico || 'Equipo en proceso de revisión.'}</p>
             
