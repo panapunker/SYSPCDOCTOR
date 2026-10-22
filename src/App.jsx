@@ -1,4 +1,4 @@
-mport React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from './lib/supabase';
 
 // ==========================================
