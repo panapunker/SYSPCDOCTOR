@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+mport React, { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from './lib/supabase';
 
 // ==========================================
@@ -403,6 +403,7 @@ function MainApp() {
 
   const [tipoClienteOpt, setTipoClienteOpt] = useState('EXISTENTE');
   const [busquedaCliente, setBusquedaCliente] = useState('');
+  const [busquedaDirectorioClientes, setBusquedaDirectorioClientes] = useState('');
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [formNuevoCliente, setFormNuevoCliente] = useState({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
   
@@ -433,8 +434,27 @@ function MainApp() {
   const [formNuevoRol, setFormNuevoRol] = useState({ nombre: '', permisos: { crear_orden: true, editar_diagnostico: true, ver_clientes: true, editar_clientes: true, facturar: true, ver_configuracion: true } });
   const [formUsuarioNuevo, setFormUsuarioNuevo] = useState({ nombre: '', usuario: '', clave: '', rolId: roles[0]?.id || '' });
 
-  const clientesFiltradosBusqueda = clientes.filter(c => c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) || c.telefono.includes(busquedaCliente));
-  const clientesFiltradosVenta = clientes.filter(c => c.nombre.toLowerCase().includes(busquedaClienteVenta.toLowerCase()) || c.telefono.includes(busquedaClienteVenta));
+  const normalizarBusqueda = (valor) => String(valor ?? '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+  const terminoBusquedaDirectorio = normalizarBusqueda(busquedaDirectorioClientes);
+  const clientesFiltradosDirectorio = clientes.filter(c => {
+    if (!terminoBusquedaDirectorio) return true;
+
+    const nombre = normalizarBusqueda(c.nombre);
+    const cedula = normalizarBusqueda(c.cedula);
+    const telefono = normalizarBusqueda(c.telefono);
+
+    return nombre.includes(terminoBusquedaDirectorio) ||
+      cedula.includes(terminoBusquedaDirectorio) ||
+      telefono.includes(terminoBusquedaDirectorio);
+  });
+
+  const clientesFiltradosBusqueda = clientes.filter(c => c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) || String(c.telefono || '').includes(busquedaCliente));
+  const clientesFiltradosVenta = clientes.filter(c => c.nombre.toLowerCase().includes(busquedaClienteVenta.toLowerCase()) || String(c.telefono || '').includes(busquedaClienteVenta));
 
   const enviarWhatsApp = (orden, idConsecutivoStr) => {
     const msg = `Hola *${orden.cliente_nombre}* 👋\n\nTe saludamos de *${empresa.nombre}*.\n\nTu orden *${idConsecutivoStr}* (*${orden.tipo_equipo} ${orden.marca_modelo}*) se encuentra en estado: *${orden.estado}*.\n\nPuedes consultar el avance, diagnóstico y estado de tu equipo ingresando a nuestra plataforma:\n🔗 https://syspcdoctor.vercel.app/portal\n\nUtiliza tu código único: *${orden.codigo_seguimiento}*`;
@@ -765,21 +785,63 @@ function MainApp() {
                 <p>Haz clic en el botón <strong>+ Nuevo Cliente</strong> o registra una nueva orden para que aparezcan aquí.</p>
               </div>
             ) : (
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-800 text-slate-400 uppercase"><tr><th className="p-3">Cliente</th><th className="p-3">Teléfono</th><th className="p-3 text-right">Acciones</th></tr></thead>
-                <tbody className="divide-y divide-slate-800">
-                  {clientes.map(c => (
-                    <tr key={c.id} className="hover:bg-slate-800/40">
-                      <td className="p-3 font-bold text-white">{c.nombre}</td>
-                      <td className="p-3 text-indigo-400">{c.telefono}</td>
-                      <td className="p-3 text-right space-x-1">
-                        {permisos.editar_clientes && <button onClick={() => { setModalEditCliente(c); setFormNuevoCliente({ nombre: c.nombre || '', telefono: c.telefono || '', cedula: c.cedula || '', email: c.email || '', direccion: c.direccion || '' }); }} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">✏️ Editar</button>}
-                        <button onClick={() => setVerHistorialCliente(c)} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">📜 Historial</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={busquedaDirectorioClientes}
+                    onChange={e => setBusquedaDirectorioClientes(e.target.value)}
+                    placeholder="🔍 Buscar por nombre, cédula o número de celular..."
+                    aria-label="Buscar clientes por nombre, cédula o celular"
+                    className="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  {busquedaDirectorioClientes && (
+                    <button
+                      type="button"
+                      onClick={() => setBusquedaDirectorioClientes('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                      aria-label="Limpiar búsqueda"
+                    >
+                      ✕ Limpiar
+                    </button>
+                  )}
+                  <p className="text-[11px] text-slate-500 mt-2">
+                    {clientesFiltradosDirectorio.length} de {clientes.length} clientes
+                  </p>
+                </div>
+
+                {clientesFiltradosDirectorio.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs">
+                    No se encontraron clientes con ese nombre, cédula o número de celular.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-800 text-slate-400 uppercase">
+                        <tr>
+                          <th className="p-3">Cliente</th>
+                          <th className="p-3">Cédula</th>
+                          <th className="p-3">Teléfono</th>
+                          <th className="p-3 text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {clientesFiltradosDirectorio.map(c => (
+                          <tr key={c.id} className="hover:bg-slate-800/40">
+                            <td className="p-3 font-bold text-white">{c.nombre}</td>
+                            <td className="p-3 text-slate-300">{c.cedula || '—'}</td>
+                            <td className="p-3 text-indigo-400">{c.telefono || '—'}</td>
+                            <td className="p-3 text-right space-x-1">
+                              {permisos.editar_clientes && <button onClick={() => { setModalEditCliente(c); setFormNuevoCliente({ nombre: c.nombre || '', telefono: c.telefono || '', cedula: c.cedula || '', email: c.email || '', direccion: c.direccion || '' }); }} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">✏️ Editar</button>}
+                              <button onClick={() => setVerHistorialCliente(c)} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">📜 Historial</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
