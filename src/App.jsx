@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { supabase } from './lib/supabase';
 
 // ==========================================
@@ -480,6 +480,7 @@ function MainApp() {
   } = useApp();
 
   const [tab, setTab] = useState('ordenes');
+  const inputExcelContactosRef = useRef(null);
   const [modalEditOrden, setModalEditOrden] = useState(null);
   const [modalEditCliente, setModalEditCliente] = useState(null);
   const [verHistorialCliente, setVerHistorialCliente] = useState(null);
@@ -1051,7 +1052,7 @@ function MainApp() {
         {/* 3. CLIENTES */}
         {tab === 'clientes' && permisos.ver_clientes && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex flex-wrap gap-2"><label className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" onChange={importarContactosExcel} className="hidden" /></label><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button>}</div></div>
+            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex flex-wrap gap-2"><button type="button" onClick={() => inputExcelContactosRef.current?.click()} className="inline-flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md border border-emerald-500/40">📥 Importar Excel</button><input ref={inputExcelContactosRef} type="file" accept=".xlsx,.xls,.csv" onChange={importarContactosExcel} style={{ display: 'none' }} aria-label="Seleccionar archivo Excel de contactos" /><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button>}</div></div>
             {clientes.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-xs space-y-2">
                 <p className="text-sm font-semibold text-slate-300">No hay clientes registrados en esta empresa todavía.</p>
