@@ -105,6 +105,16 @@ export function AppProvider({ children }) {
     }
   };
 
+  const importarClientes = async (listaClientes) => {
+    const { data, error } = await supabase.from('clientes').insert(listaClientes).select();
+    if (error) {
+      console.error('Error importando clientes:', error);
+      return { data: null, error };
+    }
+    if (data?.length) setClientes(prev => [...data, ...prev]);
+    return { data: data || [], error: null };
+  };
+
   const agregarOrden = async (ordenData, clienteSeleccionado, nombreUsuario) => {
     const nueva = {
       codigo_seguimiento: generarCodigoSeguimiento(),
@@ -357,7 +367,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       empresa, setEmpresa: actualizarEmpresa, roles, agregarRol, actualizarRol, usuarios, agregarUsuario,
       usuarioSesion, login, logout, rolActual,
-      clientes, agregarCliente, modificarCliente,
+      clientes, agregarCliente, modificarCliente, importarClientes,
       ordenes, agregarOrden, actualizarOrden,
       facturas, remisionarOrden, agregarVentaDirecta,
       compras, agregarCompra, actualizarPrecioCompra
@@ -465,7 +475,7 @@ function MainApp() {
   const {
     empresa, clientes, ordenes, facturas, compras, agregarCompra, actualizarPrecioCompra, roles, agregarRol, actualizarRol, usuarios, agregarUsuario,
     usuarioSesion, logout, rolActual,
-    agregarCliente, modificarCliente, agregarOrden, actualizarOrden,
+    agregarCliente, modificarCliente, importarClientes, agregarOrden, actualizarOrden,
     remisionarOrden, agregarVentaDirecta, setEmpresa
   } = useApp();
 
@@ -595,6 +605,107 @@ function MainApp() {
     const msg = `Hola *${orden.cliente_nombre}* 👋\n\nTe saludamos de *${empresa.nombre}*.\n\nTu orden *${idConsecutivoStr}* (*${orden.tipo_equipo} ${orden.marca_modelo}*) se encuentra en estado: *${orden.estado}*.\n\nPuedes consultar el avance, diagnóstico y estado de tu equipo ingresando a nuestra plataforma:\n🔗 https://syspcdoctor.vercel.app/portal\n\nUtiliza tu código único: *${orden.codigo_seguimiento}*`;
     const url = `https://wa.me/${telefono}?text=${encodeURIComponent(msg)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  // Importación de contactos desde Excel (.xlsx/.xls) o CSV.
+  // Columnas esperadas, en este orden: cédula, nombre, dirección, teléfono.
+  const importarContactosExcel = async (event) => {
+    const archivo = event.target.files?.[0];
+    if (!archivo) return;
+
+    try {
+      const extension = archivo.name.split('.').pop()?.toLowerCase();
+      let filas = [];
+
+      if (extension === 'csv') {
+        const contenido = await archivo.text();
+        const parseCSV = (texto) => {
+          const resultado = [];
+          let fila = [], campo = '', dentroComillas = false;
+          for (let i = 0; i < texto.length; i++) {
+            const ch = texto[i], siguiente = texto[i + 1];
+            if (ch === '"' && dentroComillas && siguiente === '"') { campo += '"'; i++; }
+            else if (ch === '"') dentroComillas = !dentroComillas;
+            else if ((ch === ',' || ch === ';' || ch === '\t') && !dentroComillas) { fila.push(campo.trim()); campo = ''; }
+            else if ((ch === '\n' || ch === '\r') && !dentroComillas) {
+              if (ch === '\r' && siguiente === '\n') i++;
+              fila.push(campo.trim());
+              if (fila.some(v => v !== '')) resultado.push(fila);
+              fila = []; campo = '';
+            } else campo += ch;
+          }
+          fila.push(campo.trim());
+          if (fila.some(v => v !== '')) resultado.push(fila);
+          return resultado;
+        };
+        filas = parseCSV(contenido.replace(/^\uFEFF/, ''));
+      } else {
+        // XLSX se carga únicamente cuando el usuario utiliza la función de importación.
+        const XLSX = await import('xlsx');
+        const buffer = await archivo.arrayBuffer();
+        const libro = XLSX.read(buffer, { type: 'array', raw: false });
+        const hoja = libro.Sheets[libro.SheetNames[0]];
+        filas = XLSX.utils.sheet_to_json(hoja, { header: 1, defval: '', raw: false });
+      }
+
+      if (!filas.length) {
+        alert('El archivo está vacío o no contiene filas legibles.');
+        return;
+      }
+
+      const primeraCelda = String(filas[0]?.[0] ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (['cedula', 'cédula', 'identificacion', 'identificación', 'documento'].includes(primeraCelda)) filas = filas.slice(1);
+
+      const digitos = valor => String(valor ?? '').replace(/\D/g, '');
+      const texto = valor => String(valor ?? '').trim();
+      const vistosArchivo = new Set();
+      const nuevos = [];
+      let filasInvalidas = 0, duplicados = 0;
+
+      filas.forEach(fila => {
+        const cedula = digitos(fila?.[0]);
+        const nombre = texto(fila?.[1]);
+        const direccion = texto(fila?.[2]);
+        const telefono = digitos(fila?.[3]);
+
+        if (!nombre || !telefono) { filasInvalidas++; return; }
+
+        const clave = cedula ? `cedula:${cedula}` : `telefono:${telefono}`;
+        const yaExiste = clientes.some(c =>
+          (cedula && digitos(c.cedula) === cedula) ||
+          (!cedula && telefono && digitos(c.telefono) === telefono)
+        );
+        if (yaExiste || vistosArchivo.has(clave)) { duplicados++; return; }
+        vistosArchivo.add(clave);
+        nuevos.push({ cedula, nombre, direccion, telefono, email: '' });
+      });
+
+      if (!nuevos.length) {
+        alert(`No hay contactos nuevos para importar.\nFilas incompletas: ${filasInvalidas}. Duplicados omitidos: ${duplicados}.`);
+        return;
+      }
+
+      const resultadoImportacion = await importarClientes(nuevos);
+      if (resultadoImportacion.error) {
+        const error = resultadoImportacion.error;
+        alert(`No se pudieron importar los contactos. ${error.message || 'Verifica el formato del archivo.'}`);
+        return;
+      }
+
+      const insertados = resultadoImportacion.data || [];
+      if (insertados.length) {
+        alert(`Importación finalizada.\nContactos importados: ${insertados.length}\nDuplicados omitidos: ${duplicados}\nFilas incompletas omitidas: ${filasInvalidas}`);
+      } else {
+        alert('Supabase no devolvió los contactos importados. Verifica el directorio antes de volver a intentarlo.');
+      }
+    } catch (error) {
+      console.error('Error leyendo Excel:', error);
+      alert(error?.code === 'ERR_MODULE_NOT_FOUND' || String(error?.message || '').includes('xlsx')
+        ? 'Para importar archivos Excel .xlsx/.xls, instala la dependencia "xlsx" en el proyecto (npm install xlsx). También puedes importar un archivo CSV sin instalarla.'
+        : 'No se pudo leer el archivo. Verifica que sea un Excel (.xlsx/.xls) o CSV válido.');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const exportarClientesCSV = () => {
@@ -754,8 +865,8 @@ function MainApp() {
                 <div className="space-y-2 pt-2 bg-slate-800/40 p-3 rounded-xl border border-slate-800">
                   <input placeholder="Nombre Completo *" className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" value={formNuevoCliente.nombre} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, nombre: e.target.value })} />
                   <div className="grid grid-cols-2 gap-2">
-                    <input placeholder="Teléfono / WhatsApp *" className="bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" value={formNuevoCliente.telefono} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, telefono: e.target.value })} />
-                    <input placeholder="Cédula" className="bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" value={formNuevoCliente.cedula} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, cedula: e.target.value })} />
+                    <input placeholder="Teléfono / WhatsApp *" className="bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" value={formNuevoCliente.telefono} inputMode="numeric" pattern="[0-9]*" onChange={e => setFormNuevoCliente({ ...formNuevoCliente, telefono: e.target.value.replace(/\D/g, '') })} />
+                    <input placeholder="Cédula" className="bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" value={formNuevoCliente.cedula} inputMode="numeric" pattern="[0-9]*" onChange={e => setFormNuevoCliente({ ...formNuevoCliente, cedula: e.target.value.replace(/\D/g, '') })} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input placeholder="Correo Electrónico" type="email" className="bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" value={formNuevoCliente.email} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, email: e.target.value })} />
@@ -940,7 +1051,7 @@ function MainApp() {
         {/* 3. CLIENTES */}
         {tab === 'clientes' && permisos.ver_clientes && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-            <div className="flex justify-between items-center"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="space-x-2"><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button>}</div></div>
+            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex flex-wrap gap-2"><label className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" onChange={importarContactosExcel} className="hidden" /></label><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button>}</div></div>
             {clientes.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-xs space-y-2">
                 <p className="text-sm font-semibold text-slate-300">No hay clientes registrados en esta empresa todavía.</p>
@@ -1343,7 +1454,7 @@ function MainApp() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <div><label className="text-slate-400">Teléfono</label><input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.telefono} onChange={e => setEmpresa({ ...empresa, telefono: e.target.value })} /></div>
+                  <div><label className="text-slate-400">Teléfono</label><input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.telefono} inputMode="numeric" pattern="[0-9]*" onChange={e => setEmpresa({ ...empresa, telefono: e.target.value.replace(/\D/g, '') })} /></div>
                   <div><label className="text-slate-400">Correo</label><input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.email} onChange={e => setEmpresa({ ...empresa, email: e.target.value })} /></div>
                   <div><label className="text-slate-400">Dirección</label><input className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-white" value={empresa.direccion} onChange={e => setEmpresa({ ...empresa, direccion: e.target.value })} /></div>
                 </div>
@@ -1547,8 +1658,8 @@ function MainApp() {
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md p-6 rounded-2xl space-y-3">
             <h3 className="font-bold text-white text-base">{modalEditCliente.id ? 'Modificar Cliente' : 'Nuevo Cliente'}</h3>
             <input placeholder="Nombre *" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" value={formNuevoCliente.nombre} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, nombre: e.target.value })} />
-            <input placeholder="Teléfono *" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" value={formNuevoCliente.telefono} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, telefono: e.target.value })} />
-            <input placeholder="Cédula" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" value={formNuevoCliente.cedula} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, cedula: e.target.value })} />
+            <input placeholder="Teléfono *" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" value={formNuevoCliente.telefono} inputMode="numeric" pattern="[0-9]*" onChange={e => setFormNuevoCliente({ ...formNuevoCliente, telefono: e.target.value.replace(/\D/g, '') })} />
+            <input placeholder="Cédula" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" value={formNuevoCliente.cedula} inputMode="numeric" pattern="[0-9]*" onChange={e => setFormNuevoCliente({ ...formNuevoCliente, cedula: e.target.value.replace(/\D/g, '') })} />
             <input placeholder="Correo Electrónico" type="email" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" value={formNuevoCliente.email} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, email: e.target.value })} />
             <input placeholder="Dirección" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" value={formNuevoCliente.direccion} onChange={e => setFormNuevoCliente({ ...formNuevoCliente, direccion: e.target.value })} />
             <div className="flex justify-end gap-2 pt-2">
@@ -1634,8 +1745,8 @@ function MainApp() {
                 <div className="space-y-2 pt-1 bg-slate-800/40 p-3 rounded-xl border border-slate-800 text-xs">
                   <input placeholder="Nombre Completo *" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" value={formNuevoClienteVenta.nombre} onChange={e => setFormNuevoClienteVenta({ ...formNuevoClienteVenta, nombre: e.target.value })} />
                   <div className="grid grid-cols-2 gap-2">
-                    <input placeholder="Teléfono / WhatsApp *" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" value={formNuevoClienteVenta.telefono} onChange={e => setFormNuevoClienteVenta({ ...formNuevoClienteVenta, telefono: e.target.value })} />
-                    <input placeholder="Cédula" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" value={formNuevoClienteVenta.cedula} onChange={e => setFormNuevoClienteVenta({ ...formNuevoClienteVenta, cedula: e.target.value })} />
+                    <input placeholder="Teléfono / WhatsApp *" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" value={formNuevoClienteVenta.telefono} inputMode="numeric" pattern="[0-9]*" onChange={e => setFormNuevoClienteVenta({ ...formNuevoClienteVenta, telefono: e.target.value.replace(/\D/g, '') })} />
+                    <input placeholder="Cédula" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" value={formNuevoClienteVenta.cedula} inputMode="numeric" pattern="[0-9]*" onChange={e => setFormNuevoClienteVenta({ ...formNuevoClienteVenta, cedula: e.target.value.replace(/\D/g, '') })} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input placeholder="Correo Electrónico" type="email" className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" value={formNuevoClienteVenta.email} onChange={e => setFormNuevoClienteVenta({ ...formNuevoClienteVenta, email: e.target.value })} />
