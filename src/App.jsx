@@ -1463,7 +1463,16 @@ function MainApp() {
       {modalEditOrden && (
         <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-4 z-50 no-imprimir">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg p-6 rounded-2xl space-y-3 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-white text-base">Modificar Orden #{modalEditOrden.id}</h3>
+            <div className="space-y-1 border-b border-slate-700 pb-3">
+              <h3 className="font-bold text-white text-base">Modificar Orden #{modalEditOrden.id}</h3>
+              <p className="text-sm font-semibold text-indigo-300">Cliente: {modalEditOrden.cliente_nombre || 'Sin nombre registrado'}</p>
+              <p className="text-xs text-slate-300">Equipo: {modalEditOrden.tipo_equipo || 'Equipo'} {modalEditOrden.marca_modelo || 'Marca/modelo no registrado'}</p>
+            </div>
+
+            <div className="bg-amber-950/30 p-3 rounded-xl border border-amber-700/60 space-y-1">
+              <p className="text-xs font-bold text-amber-300">Fallo reportado al ingresar</p>
+              <p className="text-xs text-slate-100 whitespace-pre-wrap break-words">{modalEditOrden.fallo_reportado || modalEditOrden.falla_reportado || 'No se registró un fallo reportado para esta orden.'}</p>
+            </div>
             
             <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 max-h-36 overflow-y-auto space-y-1 text-xs">
               <p className="font-bold text-indigo-400">Historial de Avances Anteriores:</p>
