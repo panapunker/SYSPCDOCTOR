@@ -557,9 +557,14 @@ function MainApp() {
     const termino = normalizarBusqueda(ordenesBusqueda);
     if (!termino) return true;
     const cliente = clientes.find(c => normalizarBusqueda(c.nombre) === normalizarBusqueda(o.cliente_nombre));
+    const indiceOriginal = ordenes.findIndex(registro => registro.id === o.id);
+    const idRegistroConsecutivo = `#${1001 + (ordenes.length - 1 - Math.max(indiceOriginal, 0))}`;
+    const busquedaId = termino.replace(/^#/, '');
     return normalizarBusqueda(o.cliente_nombre).includes(termino) ||
       normalizarBusqueda(o.cliente_telefono).includes(termino) ||
-      normalizarBusqueda(cliente?.cedula).includes(termino);
+      normalizarBusqueda(cliente?.cedula).includes(termino) ||
+      normalizarBusqueda(idRegistroConsecutivo).includes(termino) ||
+      (busquedaId !== '' && String(idRegistroConsecutivo).replace(/^#/, '').includes(busquedaId));
   }).sort((a, b) => {
     const fechaA = new Date(a.created_at || a.fecha || 0).getTime() || 0;
     const fechaB = new Date(b.created_at || b.fecha || 0).getTime() || 0;
@@ -863,8 +868,8 @@ function MainApp() {
             <h2 className="text-xl font-bold text-white">Seguimiento de Reparaciones</h2>
             <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/80 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end text-xs">
               <div className="lg:col-span-2">
-                <label className="text-slate-400 block mb-1 font-semibold">🔍 Buscar nombre, cédula o celular</label>
-                <input value={ordenesBusqueda} onChange={e => setOrdenesBusqueda(e.target.value)} placeholder="Nombre, cédula o celular..." className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" />
+                <label className="text-slate-400 block mb-1 font-semibold">🔍 Buscar ID de registro, nombre, cédula o celular</label>
+                <input value={ordenesBusqueda} onChange={e => setOrdenesBusqueda(e.target.value)} placeholder="ID (ej. 1001), nombre, cédula o celular..." className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white" />
               </div>
               <div>
                 <label className="text-slate-400 block mb-1 font-semibold">Desde</label>
@@ -1475,6 +1480,7 @@ function MainApp() {
               <label className="text-[11px] text-slate-400 block mb-1">Estado del Equipo</label>
               <select className="w-full bg-slate-800 p-2 rounded-xl text-xs text-white" value={editOrdForm.estado} onChange={e => setEditOrdForm({ ...editOrdForm, estado: e.target.value })}>
                 <option value="Ingresado">Ingresado</option>
+                <option value="No tiene reparación">No tiene reparación</option>
                 <option value="En Diagnóstico">En Diagnóstico</option>
                 <option value="Esperando Repuesto">Esperando Repuesto</option>
                 <option value="Reparado / Listo">Reparado / Listo</option>
