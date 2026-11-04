@@ -672,14 +672,81 @@ function MainApp() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  // Exporta los contactos con el mismo orden de columnas que exige la importación:
+  // Nombre | Teléfono | Cédula | Email | Dirección.
+  const exportarClientesExcel = () => {
+    if (!clientes.length) {
+      alert('No hay contactos para exportar.');
+      return;
+    }
+
+    const encabezados = ['Nombre', 'Teléfono', 'Cédula', 'Email', 'Dirección'];
+    const filas = clientes.map(c => [
+      String(c.nombre ?? ''),
+      String(c.telefono ?? ''),
+      String(c.cedula ?? ''),
+      String(c.email ?? ''),
+      String(c.direccion ?? '')
+    ]);
+    const hoja = XLSX.utils.aoa_to_sheet([encabezados, ...filas]);
+    hoja['!cols'] = [
+      { wch: 30 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 32 },
+      { wch: 38 }
+    ];
+    // Mantiene teléfonos y cédulas como texto para conservar ceros iniciales.
+    const rango = XLSX.utils.decode_range(hoja['!ref']);
+    for (let fila = 1; fila <= rango.e.r; fila++) {
+      for (const columna of [1, 2]) {
+        const celda = hoja[XLSX.utils.encode_cell({ r: fila, c: columna })];
+        if (celda) { celda.t = 's'; celda.v = String(celda.v ?? ''); }
+      }
+    }
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Contactos');
+    XLSX.writeFile(libro, 'clientes_taller.xlsx', { bookType: 'xlsx' });
+  };
+
+  // Formato Excel antiguo .xls (BIFF8), compatible con la importación del sistema.
+  const exportarClientesXLS = () => {
+    if (!clientes.length) {
+      alert('No hay contactos para exportar.');
+      return;
+    }
+    const encabezados = ['Nombre', 'Teléfono', 'Cédula', 'Email', 'Dirección'];
+    const filas = clientes.map(c => [
+      String(c.nombre ?? ''), String(c.telefono ?? ''), String(c.cedula ?? ''),
+      String(c.email ?? ''), String(c.direccion ?? '')
+    ]);
+    const hoja = XLSX.utils.aoa_to_sheet([encabezados, ...filas]);
+    hoja['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 32 }, { wch: 38 }];
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Contactos');
+    XLSX.writeFile(libro, 'clientes_taller.xls', { bookType: 'biff8' });
+  };
+
+  // También permite descargar CSV, conservando exactamente el mismo orden de columnas.
   const exportarClientesCSV = () => {
-    let csv = 'Nombre,Telefono,Cedula,Email,Direccion\n';
-    clientes.forEach(c => csv += `"${c.nombre}","${c.telefono}","${c.cedula || ''}","${c.email || ''}","${c.direccion || ''}"\n`);
-    const blob = new Blob([csv], { type: 'text/csv' });
+    if (!clientes.length) {
+      alert('No hay contactos para exportar.');
+      return;
+    }
+    const escaparCSV = valor => `"${String(valor ?? '').replace(/"/g, '""')}"`;
+    const filas = [
+      ['Nombre', 'Teléfono', 'Cédula', 'Email', 'Dirección'],
+      ...clientes.map(c => [c.nombre, c.telefono, c.cedula, c.email, c.direccion])
+    ];
+    const csv = '\uFEFF' + filas.map(fila => fila.map(escaparCSV).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `clientes_taller.csv`;
+    a.href = url;
+    a.download = 'clientes_taller.csv';
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Importa clientes desde Excel/CSV respetando el orden fijo de columnas:
@@ -1150,7 +1217,7 @@ function MainApp() {
         {/* 3. CLIENTES */}
         {tab === 'clientes' && permisos.ver_clientes && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex items-center gap-2 flex-wrap"><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <><label className={`bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold ${importacionClientes.activa ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}>📥 {importacionClientes.activa ? 'Importando...' : 'Importar Excel'}<input type="file" accept=".xlsx,.xls,.csv" onChange={importarClientesExcel} className="hidden" disabled={importacionClientes.activa} /></label><button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button></>}</div></div>
+            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex items-center gap-2 flex-wrap"><button onClick={exportarClientesExcel} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar XLSX</button><button onClick={exportarClientesXLS} className="bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📗 Exportar XLS</button><button onClick={exportarClientesCSV} className="bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📄 Exportar CSV</button>{permisos.editar_clientes && <><label className={`bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold ${importacionClientes.activa ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}>📥 {importacionClientes.activa ? 'Importando...' : 'Importar Excel'}<input type="file" accept=".xlsx,.xls,.csv" onChange={importarClientesExcel} className="hidden" disabled={importacionClientes.activa} /></label><button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button></>}</div></div>
             <p className="text-[11px] text-slate-500">Importa archivos Excel o CSV con las columnas en este orden: Nombre, Teléfono, Cédula, Email y Dirección. Los clientes con cédula repetida se omiten.</p>
             {importacionClientes.visible && (
               <div className="bg-slate-800/70 border border-slate-700 rounded-xl p-4 space-y-2" role="status" aria-live="polite">
