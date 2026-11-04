@@ -566,6 +566,7 @@ function MainApp() {
   const [tipoClienteOpt, setTipoClienteOpt] = useState('EXISTENTE');
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [busquedaDirectorioClientes, setBusquedaDirectorioClientes] = useState('');
+  const [importacionClientes, setImportacionClientes] = useState({ visible: false, activa: false, porcentaje: 0, procesados: 0, total: 0, etapa: '' });
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [formNuevoCliente, setFormNuevoCliente] = useState({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
   
@@ -688,20 +689,23 @@ function MainApp() {
     const archivo = evento.target.files?.[0];
     if (!archivo) return;
 
+    setImportacionClientes({ visible: true, activa: true, porcentaje: 0, procesados: 0, total: 0, etapa: 'Preparando archivo...' });
+
     try {
       const extension = archivo.name.split('.').pop()?.toLowerCase();
       if (!['xlsx', 'xls', 'csv'].includes(extension)) {
+        setImportacionClientes(prev => ({ ...prev, etapa: 'Formato no válido.' }));
         alert('Formato no válido. Selecciona un archivo Excel (.xlsx, .xls) o CSV.');
-        evento.target.value = '';
         return;
       }
 
+      setImportacionClientes(prev => ({ ...prev, etapa: 'Leyendo archivo...' }));
       const contenido = await archivo.arrayBuffer();
       const libro = XLSX.read(contenido, { type: 'array', raw: false });
       const primeraHoja = libro.Sheets[libro.SheetNames[0]];
       if (!primeraHoja) {
+        setImportacionClientes(prev => ({ ...prev, etapa: 'El archivo no contiene datos.' }));
         alert('El archivo no contiene una hoja de datos.');
-        evento.target.value = '';
         return;
       }
 
@@ -713,8 +717,8 @@ function MainApp() {
       });
 
       if (!filas.length) {
+        setImportacionClientes(prev => ({ ...prev, etapa: 'El archivo está vacío.' }));
         alert('El archivo está vacío.');
-        evento.target.value = '';
         return;
       }
 
@@ -762,34 +766,58 @@ function MainApp() {
       });
 
       if (!nuevosClientes.length) {
+        setImportacionClientes(prev => ({ ...prev, etapa: 'No hay clientes nuevos para importar.' }));
         alert(`No hay clientes nuevos para importar.\nDuplicados omitidos: ${duplicados}.\nFilas inválidas (sin nombre o teléfono): ${filasInvalidas}.`);
-        evento.target.value = '';
         return;
       }
 
       let clientesInsertados = [];
-      // Inserta por lotes para evitar solicitudes demasiado grandes.
-      for (let i = 0; i < nuevosClientes.length; i += 100) {
-        const lote = nuevosClientes.slice(i, i + 100);
+      const totalClientes = nuevosClientes.length;
+      const tamanoLote = 25;
+      setImportacionClientes(prev => ({
+        ...prev,
+        total: totalClientes,
+        porcentaje: 0,
+        procesados: 0,
+        etapa: 'Guardando contactos en Supabase...'
+      }));
+
+      // Inserta por lotes pequeños para actualizar la barra durante la subida.
+      for (let i = 0; i < totalClientes; i += tamanoLote) {
+        const lote = nuevosClientes.slice(i, i + tamanoLote);
         const { data, error } = await supabase.from('clientes').insert(lote).select();
         if (error) {
           console.error('Error importando clientes:', error);
           if (clientesInsertados.length) {
             setClientes(prev => [...clientesInsertados, ...prev]);
           }
+          setImportacionClientes(prev => ({
+            ...prev,
+            etapa: `Importación interrumpida: ${clientesInsertados.length} de ${totalClientes} contactos guardados.`
+          }));
           alert(`La importación se detuvo por un error de Supabase: ${error.message}\nClientes guardados antes del error: ${clientesInsertados.length}.`);
-          evento.target.value = '';
           return;
         }
         if (data?.length) clientesInsertados = [...clientesInsertados, ...data];
+
+        const procesados = Math.min(i + lote.length, totalClientes);
+        setImportacionClientes(prev => ({
+          ...prev,
+          procesados,
+          porcentaje: Math.round((procesados / totalClientes) * 100),
+          etapa: `Guardando contactos en Supabase... ${procesados} de ${totalClientes}`
+        }));
       }
 
       setClientes(prev => [...clientesInsertados, ...prev]);
+      setImportacionClientes(prev => ({ ...prev, porcentaje: 100, procesados: clientesInsertados.length, etapa: '¡Importación completada correctamente!' }));
       alert(`Importación completada.\nClientes importados: ${clientesInsertados.length}.\nDuplicados omitidos por cédula: ${duplicados}.\nFilas inválidas (sin nombre o teléfono): ${filasInvalidas}.`);
     } catch (error) {
       console.error('Error leyendo el archivo de clientes:', error);
+      setImportacionClientes(prev => ({ ...prev, etapa: 'Error al procesar el archivo.' }));
       alert(`No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.\n${error.message || ''}`);
     } finally {
+      setImportacionClientes(prev => ({ ...prev, activa: false }));
       evento.target.value = '';
     }
   };
@@ -1122,8 +1150,26 @@ function MainApp() {
         {/* 3. CLIENTES */}
         {tab === 'clientes' && permisos.ver_clientes && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex items-center gap-2 flex-wrap"><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <><label className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" onChange={importarClientesExcel} className="hidden" /></label><button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button></>}</div></div>
+            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex items-center gap-2 flex-wrap"><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <><label className={`bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold ${importacionClientes.activa ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}>📥 {importacionClientes.activa ? 'Importando...' : 'Importar Excel'}<input type="file" accept=".xlsx,.xls,.csv" onChange={importarClientesExcel} className="hidden" disabled={importacionClientes.activa} /></label><button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button></>}</div></div>
             <p className="text-[11px] text-slate-500">Importa archivos Excel o CSV con las columnas en este orden: Nombre, Teléfono, Cédula, Email y Dirección. Los clientes con cédula repetida se omiten.</p>
+            {importacionClientes.visible && (
+              <div className="bg-slate-800/70 border border-slate-700 rounded-xl p-4 space-y-2" role="status" aria-live="polite">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-semibold text-slate-200">{importacionClientes.etapa}</span>
+                  <span className="font-bold text-indigo-300 tabular-nums">{importacionClientes.porcentaje}%</span>
+                </div>
+                <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-700">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-600 to-emerald-500 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${importacionClientes.porcentaje}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <span>{importacionClientes.procesados.toLocaleString('es-CO')} de {importacionClientes.total.toLocaleString('es-CO')} contactos guardados</span>
+                  {importacionClientes.activa && <span className="text-indigo-300">Procesando...</span>}
+                </div>
+              </div>
+            )}
             {clientes.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-xs space-y-2">
                 <p className="text-sm font-semibold text-slate-300">No hay clientes registrados en esta empresa todavía.</p>
