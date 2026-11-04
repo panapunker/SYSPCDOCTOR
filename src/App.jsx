@@ -1,4 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from './lib/supabase';
 
 // ==========================================
@@ -680,6 +681,119 @@ function MainApp() {
     a.click();
   };
 
+  // Importa clientes desde Excel/CSV respetando el orden fijo de columnas:
+  // Nombre | Teléfono | Cédula | Email | Dirección.
+  // Si la cédula ya existe, la fila se omite para evitar duplicados.
+  const importarClientesExcel = async (evento) => {
+    const archivo = evento.target.files?.[0];
+    if (!archivo) return;
+
+    try {
+      const extension = archivo.name.split('.').pop()?.toLowerCase();
+      if (!['xlsx', 'xls', 'csv'].includes(extension)) {
+        alert('Formato no válido. Selecciona un archivo Excel (.xlsx, .xls) o CSV.');
+        evento.target.value = '';
+        return;
+      }
+
+      const contenido = await archivo.arrayBuffer();
+      const libro = XLSX.read(contenido, { type: 'array', raw: false });
+      const primeraHoja = libro.Sheets[libro.SheetNames[0]];
+      if (!primeraHoja) {
+        alert('El archivo no contiene una hoja de datos.');
+        evento.target.value = '';
+        return;
+      }
+
+      const filas = XLSX.utils.sheet_to_json(primeraHoja, {
+        header: 1,
+        defval: '',
+        raw: false,
+        blankrows: false
+      });
+
+      if (!filas.length) {
+        alert('El archivo está vacío.');
+        evento.target.value = '';
+        return;
+      }
+
+      const normalizarCedulaImportacion = valor => String(valor ?? '')
+        .trim()
+        .replace(/[.\s-]/g, '')
+        .toLowerCase();
+
+      // Reconoce y omite una primera fila de encabezados si existe.
+      const primeraFila = filas[0].slice(0, 5).map(v => String(v ?? '').trim().toLowerCase());
+      const tieneEncabezado = primeraFila.some(v => ['nombre', 'telefono', 'teléfono', 'cedula', 'cédula'].includes(v));
+      const filasDatos = tieneEncabezado ? filas.slice(1) : filas;
+
+      const cedulasExistentes = new Set(
+        clientes
+          .map(c => normalizarCedulaImportacion(c.cedula))
+          .filter(Boolean)
+      );
+      const cedulasArchivo = new Set();
+      const nuevosClientes = [];
+      let filasInvalidas = 0;
+      let duplicados = 0;
+
+      filasDatos.forEach(fila => {
+        const nombre = String(fila[0] ?? '').trim();
+        const telefono = String(fila[1] ?? '').trim();
+        const cedula = String(fila[2] ?? '').trim();
+        const email = String(fila[3] ?? '').trim();
+        const direccion = String(fila[4] ?? '').trim();
+
+        // Nombre y teléfono son los únicos campos obligatorios.
+        if (!nombre || !telefono) {
+          filasInvalidas++;
+          return;
+        }
+
+        const cedulaNormalizada = normalizarCedulaImportacion(cedula);
+        if (cedulaNormalizada && (cedulasExistentes.has(cedulaNormalizada) || cedulasArchivo.has(cedulaNormalizada))) {
+          duplicados++;
+          return;
+        }
+
+        if (cedulaNormalizada) cedulasArchivo.add(cedulaNormalizada);
+        nuevosClientes.push({ nombre, telefono, cedula, email, direccion });
+      });
+
+      if (!nuevosClientes.length) {
+        alert(`No hay clientes nuevos para importar.\nDuplicados omitidos: ${duplicados}.\nFilas inválidas (sin nombre o teléfono): ${filasInvalidas}.`);
+        evento.target.value = '';
+        return;
+      }
+
+      let clientesInsertados = [];
+      // Inserta por lotes para evitar solicitudes demasiado grandes.
+      for (let i = 0; i < nuevosClientes.length; i += 100) {
+        const lote = nuevosClientes.slice(i, i + 100);
+        const { data, error } = await supabase.from('clientes').insert(lote).select();
+        if (error) {
+          console.error('Error importando clientes:', error);
+          if (clientesInsertados.length) {
+            setClientes(prev => [...clientesInsertados, ...prev]);
+          }
+          alert(`La importación se detuvo por un error de Supabase: ${error.message}\nClientes guardados antes del error: ${clientesInsertados.length}.`);
+          evento.target.value = '';
+          return;
+        }
+        if (data?.length) clientesInsertados = [...clientesInsertados, ...data];
+      }
+
+      setClientes(prev => [...clientesInsertados, ...prev]);
+      alert(`Importación completada.\nClientes importados: ${clientesInsertados.length}.\nDuplicados omitidos por cédula: ${duplicados}.\nFilas inválidas (sin nombre o teléfono): ${filasInvalidas}.`);
+    } catch (error) {
+      console.error('Error leyendo el archivo de clientes:', error);
+      alert(`No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.\n${error.message || ''}`);
+    } finally {
+      evento.target.value = '';
+    }
+  };
+
   const generarReporteExcel = () => {
     const { fechaInicio, fechaFin, tipo } = reporteFiltro;
 
@@ -1008,7 +1122,8 @@ function MainApp() {
         {/* 3. CLIENTES */}
         {tab === 'clientes' && permisos.ver_clientes && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-            <div className="flex justify-between items-center"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="space-x-2"><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button>}</div></div>
+            <div className="flex justify-between items-center flex-wrap gap-2"><h2 className="text-xl font-bold text-white">Directorio de Clientes</h2><div className="flex items-center gap-2 flex-wrap"><button onClick={exportarClientesCSV} className="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-xl text-xs">📊 Exportar</button>{permisos.editar_clientes && <><label className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" onChange={importarClientesExcel} className="hidden" /></label><button onClick={() => { setModalEditCliente({}); setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">+ Nuevo Cliente</button></>}</div></div>
+            <p className="text-[11px] text-slate-500">Importa archivos Excel o CSV con las columnas en este orden: Nombre, Teléfono, Cédula, Email y Dirección. Los clientes con cédula repetida se omiten.</p>
             {clientes.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-xs space-y-2">
                 <p className="text-sm font-semibold text-slate-300">No hay clientes registrados en esta empresa todavía.</p>
