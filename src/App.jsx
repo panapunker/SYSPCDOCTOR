@@ -986,8 +986,134 @@ function MainApp() {
   const formatoCOP = valor => `$${Number(valor || 0).toLocaleString('es-CO')}`;
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
-      <style>{`@media print { main.no-imprimir { display: block !important; } body * { visibility: hidden !important; } #documento-cotizacion, #documento-cotizacion * { visibility: visible !important; } #documento-cotizacion { position: absolute; left: 0; top: 0; width: 100%; background: white !important; color: #111827 !important; } .no-imprimir { display: none !important; } }`}</style>
+    <div className="app-shell flex min-h-screen bg-slate-950 text-slate-100 font-sans">
+      <style>{`
+        /* Identidad visual: elegante, limpia y con movimiento discreto */
+        .app-shell {
+          background:
+            radial-gradient(ellipse at 82% 0%, rgba(8,145,178,.10), transparent 34%),
+            radial-gradient(ellipse at 5% 92%, rgba(99,102,241,.08), transparent 30%),
+            #020617;
+          letter-spacing: .005em;
+        }
+        .app-shell aside {
+          background: rgba(8, 15, 31, .94);
+          border-color: rgba(71, 85, 105, .42);
+          box-shadow: 12px 0 36px rgba(0,0,0,.12);
+          backdrop-filter: blur(16px);
+        }
+        .app-shell aside nav button {
+          position: relative;
+          border: 1px solid transparent;
+          transition: background .2s ease, color .2s ease, border-color .2s ease, transform .2s ease;
+        }
+        .app-shell aside nav button:hover {
+          transform: translateX(3px);
+          background: rgba(30,41,59,.78);
+          border-color: rgba(100,116,139,.22);
+          color: #e2e8f0;
+        }
+        .app-shell aside nav button[class*="bg-indigo-600"] {
+          background: linear-gradient(115deg, rgba(8,145,178,.25), rgba(79,70,229,.24)) !important;
+          border-color: rgba(34,211,238,.28) !important;
+          color: #67e8f9 !important;
+          box-shadow: inset 3px 0 0 #22d3ee, 0 8px 22px rgba(8,145,178,.08) !important;
+        }
+        .app-shell main {
+          animation: appFadeIn .42s ease both;
+        }
+        .app-shell main section,
+        .app-shell main > div > div[class*="bg-slate-900"],
+        .app-shell main > div > div[class*="rounded-2xl"] {
+          transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease;
+        }
+        .app-shell main section {
+          background: linear-gradient(145deg, rgba(22,32,51,.96), rgba(15,23,42,.96));
+          border-color: rgba(71,85,105,.34);
+          box-shadow: 0 12px 32px rgba(0,0,0,.12);
+        }
+        .app-shell main section:hover {
+          border-color: rgba(100,116,139,.48);
+          box-shadow: 0 16px 36px rgba(0,0,0,.18);
+        }
+        .app-shell main button {
+          transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+        }
+        .app-shell main button:hover {
+          filter: brightness(1.08);
+        }
+        .app-shell main button:active {
+          transform: scale(.975);
+        }
+        .app-shell input, .app-shell select, .app-shell textarea {
+          transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+        }
+        .app-shell input:focus, .app-shell select:focus, .app-shell textarea:focus {
+          outline: none;
+          border-color: rgba(34,211,238,.68) !important;
+          box-shadow: 0 0 0 3px rgba(34,211,238,.10);
+        }
+        .app-shell table { border-collapse: separate; border-spacing: 0; }
+        .app-shell th {
+          color: #94a3b8;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+        }
+        .app-shell ::-webkit-scrollbar { width: 8px; height: 8px; }
+        .app-shell ::-webkit-scrollbar-track { background: rgba(15,23,42,.55); }
+        .app-shell ::-webkit-scrollbar-thumb { background: #334155; border-radius: 20px; }
+        .app-shell ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        @keyframes appFadeIn {
+          from { opacity: 0; transform: translateY(7px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 767px) {
+          .app-shell { flex-direction: column; }
+          .app-shell aside {
+            width: 100%;
+            min-height: auto;
+            padding: 14px;
+            gap: 12px;
+            position: relative;
+          }
+          .app-shell aside > div:first-child { gap: 12px; }
+          .app-shell aside nav {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+          }
+          .app-shell aside nav button {
+            padding: 10px !important;
+            font-size: 11px;
+            min-height: 42px;
+          }
+          .app-shell aside nav button:hover { transform: translateY(-1px); }
+          .app-shell aside > div:last-child {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding-top: 10px;
+          }
+          .app-shell aside > div:last-child button { width: auto; padding: 9px 12px; }
+          .app-shell main { padding: 18px 14px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .app-shell *, .app-shell *::before, .app-shell *::after {
+            animation-duration: .01ms !important;
+            transition-duration: .01ms !important;
+            scroll-behavior: auto !important;
+          }
+        }
+        @media print {
+          main.no-imprimir { display: block !important; }
+          body * { visibility: hidden !important; }
+          #documento-cotizacion, #documento-cotizacion * { visibility: visible !important; }
+          #documento-cotizacion { position: absolute; left: 0; top: 0; width: 100%; background: white !important; color: #111827 !important; }
+          .no-imprimir { display: none !important; }
+        }
+      `}</style>
       
       {/* BARRA LATERAL */}
       <aside className="w-64 bg-slate-900 border-r border-slate-800 p-5 space-y-6 flex flex-col justify-between shrink-0 no-imprimir">
