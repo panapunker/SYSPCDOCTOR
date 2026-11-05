@@ -525,7 +525,7 @@ function MainApp() {
     remisionarOrden, agregarVentaDirecta, cancelarRemision, setEmpresa, cotizaciones, setCotizaciones
   } = useApp();
 
-  const [tab, setTab] = useState('ordenes');
+  const [tab, setTab] = useState('dashboard');
   const [modalEditOrden, setModalEditOrden] = useState(null);
   const [modalEditCliente, setModalEditCliente] = useState(null);
   const [verHistorialCliente, setVerHistorialCliente] = useState(null);
@@ -963,6 +963,28 @@ function MainApp() {
         ver_configuracion: permisosRol.ver_configuracion ?? true,
     };
 
+  // Indicadores del dashboard: se calculan con los registros que ya carga AppProvider.
+  const facturasValidas = facturas.filter(f => !facturaEstaCancelada(f));
+  const totalFacturado = facturasValidas.reduce((suma, f) => suma + (Number(f.total) || 0), 0);
+  const contarEstado = (...estados) => ordenes.filter(o => estados.includes(String(o.estado || '').trim())).length;
+  const estadoDashboard = [
+    { label: 'Recibido', count: contarEstado('Ingresado'), color: 'bg-slate-500' },
+    { label: 'En Diagnóstico', count: contarEstado('En Diagnóstico'), color: 'bg-purple-500' },
+    { label: 'Esperando Repuesto', count: contarEstado('Esperando Repuesto'), color: 'bg-amber-400' },
+    { label: 'En Reparación', count: contarEstado('En Reparación'), color: 'bg-blue-500' },
+    { label: 'Listo para Entrega', count: contarEstado('Reparado / Listo', 'No tiene reparación'), color: 'bg-emerald-500' },
+    { label: 'Entregado', count: contarEstado('Entregado / Remisionado'), color: 'bg-slate-400' }
+  ];
+  const totalOrdenesDashboard = ordenes.length;
+  const ordenesEnProcesoDashboard = contarEstado('En Diagnóstico', 'Esperando Repuesto', 'En Reparación');
+  const ordenesListasDashboard = contarEstado('Reparado / Listo', 'No tiene reparación');
+  // El esquema actual no maneja existencias. Este indicador usa órdenes detenidas por repuesto como alerta operativa.
+  const repuestosPorReponerDashboard = contarEstado('Esperando Repuesto');
+  const ingresosRecientesDashboard = [...facturasValidas]
+    .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')) || Number(b.id || 0) - Number(a.id || 0))
+    .slice(0, 5);
+  const formatoCOP = valor => `$${Number(valor || 0).toLocaleString('es-CO')}`;
+
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
       <style>{`@media print { main.no-imprimir { display: block !important; } body * { visibility: hidden !important; } #documento-cotizacion, #documento-cotizacion * { visibility: visible !important; } #documento-cotizacion { position: absolute; left: 0; top: 0; width: 100%; background: white !important; color: #111827 !important; } .no-imprimir { display: none !important; } }`}</style>
@@ -983,6 +1005,7 @@ function MainApp() {
           </div>
 
           <nav className="space-y-1.5 text-xs font-semibold">
+            <button onClick={() => setTab('dashboard')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>▦ Dashboard</button>
             {permisos.crear_orden && <button onClick={() => setTab('nueva_orden')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'nueva_orden' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>➕ Orden de Entrada/Taller</button>}
             <button onClick={() => setTab('ordenes')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'ordenes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🛠️ Reparaciones y Estado</button>
             {permisos.ver_clientes && <button onClick={() => setTab('clientes')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'clientes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>👥 Directorio de Clientes</button>}
@@ -1001,6 +1024,82 @@ function MainApp() {
 
       <main className="flex-1 p-8 overflow-y-auto max-w-7xl mx-auto w-full no-imprimir">
         
+        {/* DASHBOARD PRINCIPAL */}
+        {tab === 'dashboard' && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-extrabold text-white">Panel de Control</h2>
+                <p className="text-xs text-slate-400 mt-1">Resumen operativo del taller en tiempo real</p>
+              </div>
+              {permisos.crear_orden && (
+                <button onClick={() => setTab('nueva_orden')} className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs transition">
+                  + Ingresar Equipo
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">En proceso</p><p className="text-2xl font-extrabold text-white mt-1">{ordenesEnProcesoDashboard}</p><p className="text-[11px] text-slate-500 mt-1">Diagnóstico / Reparación</p></div>
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-2xl">◷</div>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Listos para entrega</p><p className="text-2xl font-extrabold text-emerald-400 mt-1">{ordenesListasDashboard}</p><p className="text-[11px] text-slate-500 mt-1">Pendiente retiro de cliente</p></div>
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-2xl">✓</div>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Ingresos facturados</p><p className="text-2xl font-extrabold text-cyan-400 mt-1">{formatoCOP(totalFacturado)}</p><p className="text-[11px] text-slate-500 mt-1">Remisiones no canceladas</p></div>
+                <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-2xl">$</div>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Repuestos por reponer</p><p className="text-2xl font-extrabold text-amber-400 mt-1">{repuestosPorReponerDashboard}</p><p className="text-[11px] text-slate-500 mt-1">Órdenes esperando repuesto</p></div>
+                <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-2xl">⚠</div>
+              </div>
+            </div>
+
+            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-bold text-white">Estado del Taller</h3>
+                <span className="text-cyan-400 text-lg">⌁</span>
+              </div>
+              <div className="space-y-3">
+                {estadoDashboard.map((item) => {
+                  const porcentaje = totalOrdenesDashboard ? Math.round((item.count / totalOrdenesDashboard) * 100) : 0;
+                  return (
+                    <div key={item.label}>
+                      <div className="flex justify-between gap-3 text-[11px] mb-1.5">
+                        <span className="text-slate-300">{item.label}</span>
+                        <span className="text-slate-400 tabular-nums">{item.count} ({porcentaje}%)</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                        <div className={`h-full ${item.color} transition-all`} style={{ width: `${porcentaje}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {!totalOrdenesDashboard && <p className="text-xs text-slate-500 text-center py-2">Aún no hay órdenes registradas.</p>}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-4">Total de órdenes: {totalOrdenesDashboard}. Los porcentajes se calculan sobre todas las órdenes registradas.</p>
+            </section>
+
+            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div><h3 className="font-bold text-white">Ingresos Recientes</h3><p className="text-[11px] text-slate-500 mt-1">Últimas remisiones registradas, excluyendo canceladas</p></div>
+                <button onClick={() => setTab('facturacion')} className="text-cyan-400 hover:text-cyan-300 text-xs font-bold">Ver todas →</button>
+              </div>
+              <div className="space-y-2">
+                {ingresosRecientesDashboard.length ? ingresosRecientesDashboard.map(f => (
+                  <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 last:border-0 pb-2 last:pb-0">
+                    <div><p className="text-xs font-semibold text-white">{f.numero_factura || 'Remisión'}</p><p className="text-[11px] text-slate-400">{f.cliente_nombre || 'Cliente'} · {f.fecha || 'Sin fecha'}</p></div>
+                    <p className="text-sm font-bold text-emerald-400">{formatoCOP(f.total)}</p>
+                  </div>
+                )) : <p className="text-xs text-slate-500">Todavía no hay ingresos facturados.</p>}
+              </div>
+            </section>
+          </div>
+        )}
+
         {/* 1. CREACIÓN DE NUEVA ORDEN */}
         {tab === 'nueva_orden' && permisos.crear_orden && (
           <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl space-y-5">
