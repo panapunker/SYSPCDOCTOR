@@ -536,6 +536,7 @@ function MainApp() {
   const [facturaSeleccionada, setFacturaSeleccionada] = useState(null);
   const [modalCancelarRemision, setModalCancelarRemision] = useState(null);
   const [modalEditarRemision, setModalEditarRemision] = useState(null);
+  const [scrollRemisionAntesEditar, setScrollRemisionAntesEditar] = useState(0);
   const [documentoImprimir, setDocumentoImprimir] = useState(null);
   
   const [ocultarUtilidad, setOcultarUtilidad] = useState(() => {
@@ -2542,9 +2543,23 @@ function MainApp() {
               const total= m.items.reduce((sum,it)=>sum+(Number(it.cantidad)||0)*(Number(it.precio)||0),0);
               const {data,error}=await supabase.from('facturas').update({items:itemsNuevos,total,costo_compra:Number(m.costo)||0}).eq('id',m.factura.id).select().single();
               if(error||!data){console.error(error);return alert('No se pudo guardar la modificación: '+(error?.message||'Error de Supabase'));}
-              setFacturas(prev=>prev.map(f=>f.id===data.id?data:f));
+              // Recargar la lista completa para reflejar también cualquier dato calculado/actualizado en Supabase.
+              const { data: facturasActualizadas, error: errorRecarga } = await supabase
+                .from('facturas').select('*').order('id', { ascending: false });
+              if (errorRecarga) {
+                console.error('La remisión se guardó, pero no se pudo recargar la lista:', errorRecarga);
+                setFacturas(prev => prev.map(f => f.id === data.id ? data : f));
+              } else if (facturasActualizadas) {
+                setFacturas(facturasActualizadas);
+              }
               setModalEditarRemision(null);
-              alert('Remisión modificada. El motivo quedó guardado en el historial interno.');
+              setFacturaSeleccionada(null);
+              // El modal se desmonta y la lista queda visible en la misma posición.
+              requestAnimationFrame(() => {
+                window.scrollTo({ top: scrollRemisionAntesEditar, behavior: 'auto' });
+                alert('¡Cambio realizado con éxito! La remisión fue actualizada.');
+                requestAnimationFrame(() => window.scrollTo({ top: scrollRemisionAntesEditar, behavior: 'auto' }));
+              });
             }} className="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl text-xs font-black text-white">Validar y guardar cambios</button></div>
           </div>
         </div>
@@ -2602,6 +2617,7 @@ function MainApp() {
             )}
             <div className="flex justify-end gap-2 pt-2">
               {!facturaEstaCancelada(facturaSeleccionada) && <button onClick={() => {
+                setScrollRemisionAntesEditar(window.scrollY || window.pageYOffset || 0);
                 const items = (facturaSeleccionada.items || []).filter(it => it && !it._tipo);
                 setModalEditarRemision({ factura: facturaSeleccionada, items: items.map(it => ({ descripcion: it.descripcion || '', cantidad: Number(it.cantidad) || 1, precio: Number(it.precio) || 0 })), costo: Number(facturaSeleccionada.costo_compra) || 0, password: '', motivo: '' });
                 setFacturaSeleccionada(null);
