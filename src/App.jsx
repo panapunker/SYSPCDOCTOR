@@ -535,6 +535,7 @@ function MainApp() {
   const [modalReporteExcel, setModalReporteExcel] = useState(false);
   const [facturaSeleccionada, setFacturaSeleccionada] = useState(null);
   const [modalCancelarRemision, setModalCancelarRemision] = useState(null);
+  const [modalEditarRemision, setModalEditarRemision] = useState(null);
   const [documentoImprimir, setDocumentoImprimir] = useState(null);
   
   const [ocultarUtilidad, setOcultarUtilidad] = useState(() => {
@@ -966,6 +967,8 @@ function MainApp() {
   // Indicadores del dashboard: se calculan con los registros que ya carga AppProvider.
   const facturasValidas = facturas.filter(f => !facturaEstaCancelada(f));
   const totalFacturado = facturasValidas.reduce((suma, f) => suma + (Number(f.total) || 0), 0);
+  // Utilidad estimada registrada: venta menos costo asociado guardado en cada remisión.
+  const utilidadTotalDashboard = facturasValidas.reduce((suma, f) => suma + (Number(f.total || 0) - Number(f.costo_compra || 0)), 0);
   const contarEstado = (...estados) => ordenes.filter(o => estados.includes(String(o.estado || '').trim())).length;
   const estadoDashboard = [
     { label: 'Recibido', count: contarEstado('Ingresado'), color: 'bg-slate-500' },
@@ -1177,6 +1180,10 @@ function MainApp() {
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
                 <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Ingresos facturados</p><p className="text-2xl font-extrabold text-cyan-400 mt-1">{formatoCOP(totalFacturado)}</p><p className="text-[11px] text-slate-500 mt-1">Remisiones no canceladas</p></div>
                 <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-2xl">$</div>
+              </div>
+              <div className="bg-slate-900 border border-emerald-800/60 rounded-2xl p-4 flex items-center justify-between">
+                <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Utilidad total</p><p className="text-2xl font-extrabold text-emerald-400 mt-1">{ocultarUtilidad ? '••••••' : formatoCOP(utilidadTotalDashboard)}</p><p className="text-[11px] text-slate-500 mt-1">Ventas menos costos registrados</p></div>
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-2xl">📈</div>
               </div>
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
                 <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Repuestos por reponer</p><p className="text-2xl font-extrabold text-amber-400 mt-1">{repuestosPorReponerDashboard}</p><p className="text-[11px] text-slate-500 mt-1">Órdenes esperando repuesto</p></div>
@@ -2499,6 +2506,50 @@ function MainApp() {
         </div>
       )}
 
+      {modalEditarRemision && (
+        <div className="fixed inset-0 bg-slate-950/90 flex items-center justify-center p-4 z-[80] no-imprimir">
+          <div className="bg-slate-900 border border-amber-700/60 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 rounded-2xl space-y-4 shadow-2xl">
+            <div>
+              <h3 className="text-lg font-black text-white">Modificar remisión {modalEditarRemision.factura.numero_factura}</h3>
+              <p className="text-xs text-amber-300 mt-1">Cambio excepcional. Se conservará un historial interno de la modificación.</p>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center"><label className="text-xs font-bold text-slate-300">Ítems de la remisión</label><button onClick={() => setModalEditarRemision(p => ({...p,items:[...p.items,{descripcion:'',cantidad:1,precio:0}]}))} className="text-xs text-cyan-300 font-bold">+ Agregar ítem</button></div>
+              {modalEditarRemision.items.map((it,i) => <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <input value={it.descripcion} onChange={e=>setModalEditarRemision(p=>({...p,items:p.items.map((x,j)=>j===i?{...x,descripcion:e.target.value}:x)}))} placeholder="Descripción" className="col-span-6 bg-slate-800 border border-slate-700 p-2 rounded-lg text-xs text-white"/>
+                <input type="number" min="1" value={it.cantidad} onChange={e=>setModalEditarRemision(p=>({...p,items:p.items.map((x,j)=>j===i?{...x,cantidad:Math.max(1,Number(e.target.value)||1)}:x)}))} className="col-span-2 bg-slate-800 border border-slate-700 p-2 rounded-lg text-xs text-white"/>
+                <input type="number" min="0" value={it.precio} onChange={e=>setModalEditarRemision(p=>({...p,items:p.items.map((x,j)=>j===i?{...x,precio:Math.max(0,Number(e.target.value)||0)}:x)}))} className="col-span-3 bg-slate-800 border border-slate-700 p-2 rounded-lg text-xs text-white"/>
+                <button onClick={()=>setModalEditarRemision(p=>({...p,items:p.items.filter((_,j)=>j!==i)}))} className="col-span-1 text-rose-400">✕</button>
+              </div>)}
+              <label className="block text-xs text-slate-300">Costo asociado (para cálculo de utilidad)</label>
+              <input type="number" min="0" value={modalEditarRemision.costo} onChange={e=>setModalEditarRemision(p=>({...p,costo:Math.max(0,Number(e.target.value)||0)}))} className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs text-white"/>
+              <p className="text-right text-sm font-black text-emerald-300">Nuevo total: {formatoCOP(modalEditarRemision.items.reduce((sum,it)=>sum+(Number(it.cantidad)||0)*(Number(it.precio)||0),0))}</p>
+            </div>
+            <div className="border-t border-slate-700 pt-3 space-y-3">
+              <div><label className="block text-xs font-bold text-slate-300 mb-1">Contraseña del usuario que autoriza</label><input type="password" value={modalEditarRemision.password} onChange={e=>setModalEditarRemision(p=>({...p,password:e.target.value}))} className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs text-white" placeholder="Confirma tu contraseña"/></div>
+              <div><label className="block text-xs font-bold text-slate-300 mb-1">Motivo interno del cambio (obligatorio)</label><textarea rows={3} value={modalEditarRemision.motivo} onChange={e=>setModalEditarRemision(p=>({...p,motivo:e.target.value}))} className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs text-white" placeholder="Explica por qué se modifica esta remisión. No se imprime."/></div>
+            </div>
+            <div className="flex justify-end gap-2"><button onClick={()=>setModalEditarRemision(null)} className="px-4 py-2 rounded-xl text-xs text-slate-300">Cancelar</button><button onClick={async()=>{
+              const m=modalEditarRemision; const motivo=String(m.motivo||'').trim();
+              if(!m.password) return alert('Ingresa la contraseña para autorizar el cambio.');
+              if(!motivo) return alert('El motivo interno es obligatorio.');
+              const usuarioValido=usuarios.find(u=>String(u.usuario||'').toLowerCase()===String(usuarioSesion?.usuario||'').toLowerCase() && u.clave===m.password);
+              const emergenciaValida=usuarioSesion?.id==='emergencia' && m.password==='admin123' && usuarios.length===0;
+              if(!usuarioValido && !emergenciaValida) return alert('Contraseña incorrecta. No se realizaron cambios.');
+              if(!m.items.length || m.items.some(it=>!it.descripcion.trim())) return alert('Debe existir al menos un ítem y todos deben tener descripción.');
+              const itemsPrevios=(Array.isArray(m.factura.items)?m.factura.items:[]).filter(it=>it && it._tipo);
+              const itemsNuevos=[...m.items, ...itemsPrevios, { _tipo:'auditoria_edicion', motivo, usuario:usuarioSesion?.nombre||'Usuario', fecha:new Date().toISOString(), total_anterior:Number(m.factura.total)||0, costo_anterior:Number(m.factura.costo_compra)||0 }];
+              const total= m.items.reduce((sum,it)=>sum+(Number(it.cantidad)||0)*(Number(it.precio)||0),0);
+              const {data,error}=await supabase.from('facturas').update({items:itemsNuevos,total,costo_compra:Number(m.costo)||0}).eq('id',m.factura.id).select().single();
+              if(error||!data){console.error(error);return alert('No se pudo guardar la modificación: '+(error?.message||'Error de Supabase'));}
+              setFacturas(prev=>prev.map(f=>f.id===data.id?data:f));
+              setModalEditarRemision(null);
+              alert('Remisión modificada. El motivo quedó guardado en el historial interno.');
+            }} className="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl text-xs font-black text-white">Validar y guardar cambios</button></div>
+          </div>
+        </div>
+      )}
+
       {facturaSeleccionada && (
         <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-4 z-50 no-imprimir">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg p-6 rounded-2xl space-y-4">
@@ -2528,7 +2579,7 @@ function MainApp() {
                   <tr><th className="p-2">Ítem / Descripción</th><th className="p-2 text-center">Cant.</th><th className="p-2 text-right">Precio</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {(facturaSeleccionada.items || []).filter(it => !esRegistroGarantia(it) && (!it || it._tipo !== 'cancelacion')).map((it, idx) => (
+                  {(facturaSeleccionada.items || []).filter(it => it && !it._tipo).map((it, idx) => (
                     <tr key={idx}>
                       <td className="p-2 text-[11px]">{it.descripcion}</td>
                       <td className="p-2 text-center text-[11px]">{it.cantidad}</td>
@@ -2544,7 +2595,17 @@ function MainApp() {
               <span className="font-extrabold text-emerald-400 text-base">$ {(facturaSeleccionada.total || 0).toLocaleString('es-CO')}</span>
             </div>
 
+            { !facturaEstaCancelada(facturaSeleccionada) && (
+              <div className="bg-amber-950/30 border border-amber-700/40 rounded-xl p-3 text-[11px] text-amber-200">
+                Si necesitas corregir una remisión ya emitida, el sistema solicitará contraseña y motivo. El motivo quedará como registro interno y no aparecerá en el documento del cliente.
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
+              {!facturaEstaCancelada(facturaSeleccionada) && <button onClick={() => {
+                const items = (facturaSeleccionada.items || []).filter(it => it && !it._tipo);
+                setModalEditarRemision({ factura: facturaSeleccionada, items: items.map(it => ({ descripcion: it.descripcion || '', cantidad: Number(it.cantidad) || 1, precio: Number(it.precio) || 0 })), costo: Number(facturaSeleccionada.costo_compra) || 0, password: '', motivo: '' });
+                setFacturaSeleccionada(null);
+              }} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold">✏️ Modificar remisión</button>}
               <button onClick={() => setFacturaSeleccionada(null)} className="bg-slate-800 text-white px-4 py-1.5 rounded-xl text-xs font-bold">Cerrar</button>
             </div>
           </div>
@@ -2625,7 +2686,7 @@ function MainApp() {
                       <tr><th className="p-1.5 border">Descripción</th><th className="p-1.5 text-center border">Cant.</th><th className="p-1.5 text-right border">Precio</th></tr>
                     </thead>
                     <tbody>
-                      {(documentoImprimir.data.items || []).filter(it => !esRegistroGarantia(it) && (!it || it._tipo !== 'cancelacion')).map((it, idx) => (
+                      {(documentoImprimir.data.items || []).filter(it => it && !it._tipo).map((it, idx) => (
                         <tr key={idx}><td className="p-1.5 border">{it.descripcion}</td><td className="p-1.5 text-center border">{it.cantidad}</td><td className="p-1.5 text-right border">$ {(it.precio || 0).toLocaleString('es-CO')}</td></tr>
                       ))}
                     </tbody>
